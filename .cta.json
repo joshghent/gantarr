@@ -1,0 +1,27 @@
+{
+  "projectName": "gantarr",
+  "mode": "file-router",
+  "typescript": true,
+  "packageManager": "npm",
+  "includeExamples": false,
+  "tailwind": true,
+  "addOnOptions": {
+    "drizzle": {
+      "database": "postgresql"
+    }
+  },
+  "envVarValues": {},
+  "git": true,
+  "routerOnly": false,
+  "version": 1,
+  "framework": "react",
+  "chosenAddOns": [
+    "biome",
+    "t3env",
+    "mcp",
+    "drizzle",
+    "db",
+    "shadcn",
+    "tanstack-query"
+  ]
+}
