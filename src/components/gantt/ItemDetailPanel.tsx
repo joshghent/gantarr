@@ -5,7 +5,6 @@ import { Label } from "#/components/ui/label";
 import { useGantt } from "#/lib/gantt-context";
 import {
 	ArrowRight,
-	Link2,
 	Trash2,
 	X,
 } from "lucide-react";
@@ -17,8 +16,6 @@ export default function ItemDetailPanel() {
 		setSelectedItemId,
 		updateWorkItem,
 		deleteWorkItem,
-		connectingFrom,
-		setConnectingFrom,
 		deleteDependency,
 	} = useGantt();
 
@@ -58,8 +55,8 @@ export default function ItemDetailPanel() {
 
 	return (
 		<div className="w-72 flex-shrink-0 border-l border-border bg-card overflow-y-auto">
-			<div className="flex items-center justify-between border-b border-border px-4 py-3">
-				<h3 className="text-sm font-semibold">Work Item</h3>
+			<div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+				<h3 className="font-display text-sm font-bold tracking-tight">Work Item</h3>
 				<button
 					type="button"
 					onClick={() => setSelectedItemId(null)}
@@ -214,23 +211,9 @@ export default function ItemDetailPanel() {
 							);
 						})}
 					</div>
-					<Button
-						variant="outline"
-						size="sm"
-						className="mt-2 w-full text-xs"
-						onClick={() => {
-							if (connectingFrom === item.id) {
-								setConnectingFrom(null);
-							} else {
-								setConnectingFrom(item.id);
-							}
-						}}
-					>
-						<Link2 className="mr-1 h-3 w-3" />
-						{connectingFrom === item.id
-							? "Click target item..."
-							: "Add Dependency"}
-					</Button>
+					<p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+						Drag the dot on a task&apos;s edge to link tasks
+					</p>
 				</div>
 
 				<div className="border-t border-border pt-4">

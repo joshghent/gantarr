@@ -48,24 +48,25 @@ export default function GanttToolbar({
 	};
 
 	return (
-		<div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-4 py-2">
+		<div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-1.5">
 			<Button
 				variant="outline"
 				size="sm"
 				onClick={() => addWorkstream("New Workstream")}
+				className="font-display text-xs font-semibold tracking-tight"
 			>
-				<Plus className="mr-1 h-4 w-4" />
+				<Plus className="mr-1 h-3.5 w-3.5" />
 				Workstream
 			</Button>
 
-			<div className="mx-2 h-6 w-px bg-border" />
+			<div className="mx-1.5 h-5 w-px bg-border/60" />
 
-			<div className="flex items-center rounded-md border border-border">
+			<div className="flex items-center rounded-md border border-border bg-muted/40">
 				<button
 					type="button"
-					className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+					className={`px-3 py-1 font-display text-[11px] font-semibold tracking-tight transition-colors ${
 						viewMode === "days"
-							? "bg-primary text-primary-foreground"
+							? "bg-primary text-primary-foreground shadow-sm"
 							: "text-muted-foreground hover:text-foreground"
 					} rounded-l-md`}
 					onClick={() => setViewMode("days")}
@@ -74,9 +75,9 @@ export default function GanttToolbar({
 				</button>
 				<button
 					type="button"
-					className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+					className={`px-3 py-1 font-display text-[11px] font-semibold tracking-tight transition-colors ${
 						viewMode === "weeks"
-							? "bg-primary text-primary-foreground"
+							? "bg-primary text-primary-foreground shadow-sm"
 							: "text-muted-foreground hover:text-foreground"
 					} rounded-r-md`}
 					onClick={() => setViewMode("weeks")}
@@ -85,17 +86,18 @@ export default function GanttToolbar({
 				</button>
 			</div>
 
-			<div className="ml-auto flex items-center gap-2">
-				<Button variant="ghost" size="sm" onClick={() => downloadJson(project)}>
-					<Download className="mr-1 h-4 w-4" />
+			<div className="ml-auto flex items-center gap-1">
+				<Button variant="ghost" size="sm" className="text-xs" onClick={() => downloadJson(project)}>
+					<Download className="mr-1 h-3.5 w-3.5" />
 					Save
 				</Button>
 				<Button
 					variant="ghost"
 					size="sm"
+					className="text-xs"
 					onClick={() => fileInputRef.current?.click()}
 				>
-					<FileUp className="mr-1 h-4 w-4" />
+					<FileUp className="mr-1 h-3.5 w-3.5" />
 					Load
 				</Button>
 				<input
@@ -106,14 +108,14 @@ export default function GanttToolbar({
 					onChange={handleLoad}
 				/>
 
-				<div className="mx-1 h-6 w-px bg-border" />
+				<div className="mx-0.5 h-5 w-px bg-border/60" />
 
-				<Button variant="ghost" size="sm" onClick={handleExportPng}>
-					<Image className="mr-1 h-4 w-4" />
+				<Button variant="ghost" size="sm" className="text-xs" onClick={handleExportPng}>
+					<Image className="mr-1 h-3.5 w-3.5" />
 					PNG
 				</Button>
-				<Button variant="ghost" size="sm" onClick={handleExportPdf}>
-					<FileDown className="mr-1 h-4 w-4" />
+				<Button variant="ghost" size="sm" className="text-xs" onClick={handleExportPdf}>
+					<FileDown className="mr-1 h-3.5 w-3.5" />
 					PDF
 				</Button>
 			</div>

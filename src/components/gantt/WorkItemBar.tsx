@@ -10,8 +10,7 @@ interface WorkItemBarProps {
 	width: number;
 	height: number;
 	isSelected: boolean;
-	isConnecting: boolean;
-	isConnectSource: boolean;
+	isDraggingDep: boolean;
 	onMouseDown: (
 		e: React.MouseEvent | React.TouchEvent,
 		itemId: string,
@@ -19,6 +18,7 @@ interface WorkItemBarProps {
 	) => void;
 	onClick: (itemId: string) => void;
 	onDoubleClick: (itemId: string) => void;
+	onConnectorDragStart: (e: React.MouseEvent, itemId: string) => void;
 }
 
 function isTouchDevice(): boolean {
@@ -36,11 +36,11 @@ function WorkItemBarInner({
 	width,
 	height,
 	isSelected,
-	isConnecting,
-	isConnectSource,
+	isDraggingDep,
 	onMouseDown,
 	onClick,
 	onDoubleClick,
+	onConnectorDragStart,
 }: WorkItemBarProps) {
 	const { project, editingItemId, setEditingItemId, updateWorkItem, setModalItemId } =
 		useGantt();
@@ -76,13 +76,11 @@ function WorkItemBarInner({
 
 	const handleClick = (e: React.MouseEvent) => {
 		e.stopPropagation();
-		// On touch devices, single tap opens modal directly
 		if (isTouchDevice()) {
 			setModalItemId(item.id);
 			return;
 		}
-		// If already selected, start inline editing the title
-		if (isSelected && !isEditing && !isConnecting) {
+		if (isSelected && !isEditing) {
 			setEditingItemId(item.id);
 			return;
 		}
@@ -91,21 +89,18 @@ function WorkItemBarInner({
 
 	const handleDoubleClick = (e: React.MouseEvent) => {
 		e.stopPropagation();
-		if (isConnecting) return;
 		onDoubleClick(item.id);
 	};
 
 	return (
 		<div
 			data-workitem={item.id}
-			className={`group absolute flex items-center rounded-full border text-xs font-medium shadow-sm transition-shadow select-none ${
+			className={`group absolute flex items-center rounded-lg border text-xs font-medium transition-shadow select-none ${
 				isSelected
-					? "ring-2 ring-primary ring-offset-1 z-10"
-					: isConnecting && !isConnectSource
-						? "cursor-crosshair hover:ring-2 hover:ring-blue-400"
-						: isConnectSource
-							? "ring-2 ring-blue-500 z-10"
-							: "hover:shadow-md cursor-grab active:cursor-grabbing"
+					? "ring-2 ring-primary/70 ring-offset-1 z-10 shadow-sm"
+					: isDraggingDep
+						? "cursor-crosshair hover:ring-2 hover:ring-primary/50"
+						: "hover:shadow-sm cursor-grab active:cursor-grabbing"
 			}`}
 			style={{
 				left: x,
@@ -117,20 +112,20 @@ function WorkItemBarInner({
 				color: getContrastText(color),
 			}}
 			onMouseDown={(e) => {
-				if (isConnecting || isEditing) return;
+				if (isEditing || isDraggingDep) return;
 				onMouseDown(e, item.id, "move");
 			}}
 			onTouchStart={(e) => {
-				if (isConnecting || isEditing) return;
+				if (isEditing) return;
 				onMouseDown(e, item.id, "move");
 			}}
 			onClick={handleClick}
 			onDoubleClick={handleDoubleClick}
 		>
 			{/* Left resize handle */}
-			{!isConnecting && !isEditing && (
+			{!isEditing && !isDraggingDep && (
 				<div
-					className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize opacity-0 group-hover:opacity-100 hover:bg-black/10 rounded-l-full"
+					className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize opacity-0 group-hover:opacity-100 hover:bg-black/8 rounded-l-lg"
 					onMouseDown={(e) => {
 						e.stopPropagation();
 						onMouseDown(e, item.id, "resize-start");
@@ -162,14 +157,24 @@ function WorkItemBarInner({
 			)}
 
 			{/* Right resize handle */}
-			{!isConnecting && !isEditing && (
+			{!isEditing && !isDraggingDep && (
 				<div
-					className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize opacity-0 group-hover:opacity-100 hover:bg-black/10 rounded-r-full"
+					className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize opacity-0 group-hover:opacity-100 hover:bg-black/8 rounded-r-lg"
 					onMouseDown={(e) => {
 						e.stopPropagation();
 						onMouseDown(e, item.id, "resize-end");
 					}}
 					onClick={(e) => e.stopPropagation()}
+				/>
+			)}
+
+			{/* Connector port — drag from here to create a dependency */}
+			{!isEditing && !isDraggingDep && (
+				<div
+					className="absolute -right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full border-2 border-white bg-muted-foreground opacity-0 group-hover:opacity-100 cursor-crosshair shadow-sm hover:bg-primary hover:scale-110 transition-all"
+					onMouseDown={(e) => onConnectorDragStart(e, item.id)}
+					onClick={(e) => e.stopPropagation()}
+					title="Drag to link tasks"
 				/>
 			)}
 		</div>
