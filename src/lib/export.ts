@@ -33,6 +33,7 @@ export async function exportPng(element: HTMLElement, filename: string) {
 	const dataUrl = await toPng(element, {
 		backgroundColor: "#ffffff",
 		pixelRatio: 2,
+		skipFonts: true,
 	});
 	const a = document.createElement("a");
 	a.href = dataUrl;
@@ -44,6 +45,7 @@ export async function exportPdf(element: HTMLElement, filename: string) {
 	const dataUrl = await toPng(element, {
 		backgroundColor: "#ffffff",
 		pixelRatio: 2,
+		skipFonts: true,
 	});
 
 	const img = new Image();
