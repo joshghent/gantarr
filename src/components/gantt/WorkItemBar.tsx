@@ -18,7 +18,10 @@ interface WorkItemBarProps {
 	) => void;
 	onClick: (itemId: string) => void;
 	onDoubleClick: (itemId: string) => void;
-	onConnectorDragStart: (e: React.MouseEvent, itemId: string) => void;
+	onConnectorDragStart: (
+		e: React.MouseEvent | React.TouchEvent,
+		itemId: string,
+	) => void;
 }
 
 function isTouchDevice(): boolean {
@@ -171,8 +174,9 @@ function WorkItemBarInner({
 			{/* Connector port — drag from here to create a dependency */}
 			{!isEditing && !isDraggingDep && (
 				<div
-					className="absolute -right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full border-2 border-white bg-muted-foreground opacity-0 group-hover:opacity-100 cursor-crosshair shadow-sm hover:bg-primary hover:scale-110 transition-all"
+					className="absolute -right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 touch-none rounded-full border-2 border-white bg-muted-foreground opacity-70 group-hover:opacity-100 cursor-crosshair shadow-sm hover:bg-primary hover:scale-110 transition-all"
 					onMouseDown={(e) => onConnectorDragStart(e, item.id)}
+					onTouchStart={(e) => onConnectorDragStart(e, item.id)}
 					onClick={(e) => e.stopPropagation()}
 					title="Drag to link tasks"
 				/>

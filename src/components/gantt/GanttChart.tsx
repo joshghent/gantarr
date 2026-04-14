@@ -162,7 +162,7 @@ export default function GanttChart() {
 
 	/** Start dragging a dependency arrow from a task's connector port */
 	const handleConnectorDragStart = useCallback(
-		(e: React.MouseEvent, itemId: string) => {
+		(e: React.MouseEvent | React.TouchEvent, itemId: string) => {
 			e.stopPropagation();
 			e.preventDefault();
 			const item = project.workItems.find((wi) => wi.id === itemId);
@@ -173,13 +173,16 @@ export default function GanttChart() {
 			const fromY = rowIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
 			const scrollEl = scrollRef.current;
 			const rect = scrollEl?.getBoundingClientRect();
+			const point = "touches" in e ? e.touches[0] : e;
 			setDepDrag({
 				fromItemId: itemId,
 				fromX,
 				fromY,
-				mouseX: rect ? e.clientX - rect.left + (scrollEl?.scrollLeft ?? 0) : fromX,
+				mouseX: rect
+					? point.clientX - rect.left + (scrollEl?.scrollLeft ?? 0)
+					: fromX,
 				mouseY: rect
-					? e.clientY - rect.top + (scrollEl?.scrollTop ?? 0) - HEADER_HEIGHT
+					? point.clientY - rect.top + (scrollEl?.scrollTop ?? 0) - HEADER_HEIGHT
 					: fromY,
 			});
 		},
@@ -306,6 +309,29 @@ export default function GanttChart() {
 		setDepDrag(null);
 	}, []);
 
+	const handleTouchEnd = useCallback(
+		(e: React.TouchEvent) => {
+			// Finish dependency drag on touch — same logic as handleMouseUp
+			if (depDrag) {
+				const touch = e.changedTouches[0];
+				if (touch) {
+					const target = document.elementFromPoint(touch.clientX, touch.clientY);
+					const taskEl = target?.closest("[data-workitem]");
+					if (taskEl) {
+						const toItemId = taskEl.getAttribute("data-workitem");
+						if (toItemId && toItemId !== depDrag.fromItemId) {
+							addDependency(depDrag.fromItemId, toItemId);
+						}
+					}
+				}
+				setDepDrag(null);
+				return;
+			}
+			setDragState(null);
+		},
+		[depDrag, addDependency],
+	);
+
 	const handleChartClick = useCallback(
 		(e: React.MouseEvent) => {
 			if ((e.target as HTMLElement).closest("[data-workitem]") === null) {
@@ -384,7 +410,7 @@ export default function GanttChart() {
 			onMouseUp={handleMouseUp}
 			onMouseLeave={handleMouseLeave}
 			onTouchMove={handleTouchMove}
-			onTouchEnd={() => { setDragState(null); setDepDrag(null); }}
+			onTouchEnd={handleTouchEnd}
 			onClick={handleChartClick}
 			onDoubleClick={handleChartDoubleClick}
 		>
