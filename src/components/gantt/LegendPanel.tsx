@@ -47,6 +47,7 @@ export default function LegendPanel() {
 				</div>
 				<button
 					type="button"
+					data-no-export="true"
 					onClick={() => setIsAdding(true)}
 					className="rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
 				>

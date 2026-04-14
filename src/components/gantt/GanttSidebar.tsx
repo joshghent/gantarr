@@ -190,6 +190,7 @@ export default function GanttSidebar() {
 							{/* Top bar: grip handle + actions */}
 							<div className="flex items-center gap-0.5 px-1 pt-1">
 								<div
+									data-no-export="true"
 									className="cursor-grab rounded p-0.5 text-white/50 hover:bg-white/20 hover:text-white active:cursor-grabbing"
 									onMouseDown={(e) =>
 										handleGripMouseDown(e, ws.id)
@@ -203,6 +204,7 @@ export default function GanttSidebar() {
 
 								<button
 									type="button"
+									data-no-export="true"
 									onClick={() => addWorkItem(ws.id, "New Task")}
 									className="flex items-center gap-0.5 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/30"
 									title="Add task"
@@ -212,6 +214,7 @@ export default function GanttSidebar() {
 								</button>
 								<button
 									type="button"
+									data-no-export="true"
 									onClick={() => handleDelete(ws.id, ws.label)}
 									className="rounded bg-white/20 p-0.5 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500/50"
 									title="Delete workstream"
@@ -263,6 +266,7 @@ export default function GanttSidebar() {
 				{/* + Workstream button below the last band */}
 				<button
 					type="button"
+					data-no-export="true"
 					onClick={() => addWorkstream("New Workstream")}
 					className="absolute left-0 right-0 flex items-center justify-center gap-1.5 border-t border-dashed border-border py-2.5 font-display text-[11px] font-semibold tracking-tight text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 					style={{ top: layout.totalRows * ROW_HEIGHT }}

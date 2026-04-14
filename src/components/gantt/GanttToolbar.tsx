@@ -1,5 +1,6 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
 import { useGantt } from "#/lib/gantt-context";
 import { downloadJson, exportPdf, exportPng, loadJson } from "#/lib/export";
 import {
@@ -20,13 +21,48 @@ export default function GanttToolbar({
 		useGantt();
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
+	// --- Project name editing ---
+	const [editingName, setEditingName] = useState(false);
+	const [nameDraft, setNameDraft] = useState(project.name);
+	const nameInputRef = useRef<HTMLInputElement>(null);
+
+	useEffect(() => {
+		setNameDraft(project.name);
+	}, [project.name]);
+
+	useEffect(() => {
+		if (editingName && nameInputRef.current) {
+			nameInputRef.current.focus();
+			nameInputRef.current.select();
+		}
+	}, [editingName]);
+
+	const commitName = () => {
+		const trimmed = nameDraft.trim();
+		if (trimmed && trimmed !== project.name) {
+			setProject({
+				...project,
+				name: trimmed,
+				updatedAt: new Date().toISOString(),
+			});
+		} else {
+			setNameDraft(project.name);
+		}
+		setEditingName(false);
+	};
+
+	const cancelName = () => {
+		setNameDraft(project.name);
+		setEditingName(false);
+	};
+
 	const handleLoad = async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const file = e.target.files?.[0];
 		if (!file) return;
 		try {
 			const loaded = await loadJson(file);
 			setProject(loaded);
-		} catch (err) {
+		} catch (_err) {
 			alert("Failed to load file. Make sure it's a valid .gantarr.json file.");
 		}
 		if (fileInputRef.current) fileInputRef.current.value = "";
@@ -34,22 +70,42 @@ export default function GanttToolbar({
 
 	const handleExportPng = async () => {
 		if (!chartRef.current) return;
-		await exportPng(
-			chartRef.current,
-			project.name.replace(/\s+/g, "-").toLowerCase(),
-		);
+		await exportPng(chartRef.current, project.name);
 	};
 
 	const handleExportPdf = async () => {
 		if (!chartRef.current) return;
-		await exportPdf(
-			chartRef.current,
-			project.name.replace(/\s+/g, "-").toLowerCase(),
-		);
+		await exportPdf(chartRef.current, project.name);
 	};
 
 	return (
 		<div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-1.5">
+			{editingName ? (
+				<Input
+					ref={nameInputRef}
+					value={nameDraft}
+					onChange={(e) => setNameDraft(e.target.value)}
+					onBlur={commitName}
+					onKeyDown={(e) => {
+						if (e.key === "Enter") commitName();
+						if (e.key === "Escape") cancelName();
+					}}
+					className="h-7 w-56 font-display text-sm font-bold tracking-tight"
+					maxLength={80}
+				/>
+			) : (
+				<button
+					type="button"
+					onClick={() => setEditingName(true)}
+					className="-mx-1 flex h-7 max-w-[14rem] items-center rounded-md px-2 font-display text-sm font-bold tracking-tight text-foreground transition-colors hover:bg-accent"
+					title="Click to rename project"
+				>
+					<span className="truncate">{project.name}</span>
+				</button>
+			)}
+
+			<div className="mx-1 h-5 w-px bg-border/60" />
+
 			<Button
 				variant="outline"
 				size="sm"

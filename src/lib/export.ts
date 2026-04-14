@@ -2,13 +2,44 @@ import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
 import type { GanttProject } from "../types";
 
+/**
+ * Sanitize a project name for use as a filename. Strips characters that
+ * are unsafe on common filesystems (Windows especially), normalizes
+ * whitespace, caps length, and falls back to "untitled" if nothing
+ * survives. The *display* name in the app isn't touched — React escapes
+ * that for us.
+ */
+export function sanitizeFilename(name: string): string {
+	const cleaned = name
+		.trim()
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping control chars is the point
+		.replace(/[<>:"/\\|?*\x00-\x1f]/g, "")
+		.replace(/\s+/g, "-")
+		.toLowerCase()
+		.slice(0, 100);
+	return cleaned || "untitled";
+}
+
+/**
+ * html-to-image filter: drop any node flagged with data-no-export so
+ * connector dots, drag grips, and the trailing "+ Workstream" button
+ * never show up in PNG/PDF captures.
+ */
+function excludeFromExport(node: HTMLElement): boolean {
+	if (node instanceof Element) {
+		const el = node as HTMLElement;
+		if (el.dataset?.noExport !== undefined) return false;
+	}
+	return true;
+}
+
 export function downloadJson(project: GanttProject) {
 	const data = JSON.stringify(project, null, 2);
 	const blob = new Blob([data], { type: "application/json" });
 	const url = URL.createObjectURL(blob);
 	const a = document.createElement("a");
 	a.href = url;
-	a.download = `${project.name.replace(/\s+/g, "-").toLowerCase()}.gantarr.json`;
+	a.download = `${sanitizeFilename(project.name)}.gantarr.json`;
 	a.click();
 	URL.revokeObjectURL(url);
 }
@@ -29,23 +60,25 @@ export function loadJson(file: File): Promise<GanttProject> {
 	});
 }
 
-export async function exportPng(element: HTMLElement, filename: string) {
+export async function exportPng(element: HTMLElement, projectName: string) {
 	const dataUrl = await toPng(element, {
 		backgroundColor: "#ffffff",
 		pixelRatio: 2,
 		skipFonts: true,
+		filter: excludeFromExport,
 	});
 	const a = document.createElement("a");
 	a.href = dataUrl;
-	a.download = `${filename}.png`;
+	a.download = `${sanitizeFilename(projectName)}.png`;
 	a.click();
 }
 
-export async function exportPdf(element: HTMLElement, filename: string) {
+export async function exportPdf(element: HTMLElement, projectName: string) {
 	const dataUrl = await toPng(element, {
 		backgroundColor: "#ffffff",
 		pixelRatio: 2,
 		skipFonts: true,
+		filter: excludeFromExport,
 	});
 
 	const img = new Image();
@@ -68,5 +101,5 @@ export async function exportPdf(element: HTMLElement, filename: string) {
 	});
 
 	pdf.addImage(dataUrl, "PNG", 0, 0, pdfWidth, pdfHeight);
-	pdf.save(`${filename}.pdf`);
+	pdf.save(`${sanitizeFilename(projectName)}.pdf`);
 }

@@ -1,4 +1,10 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import {
+	useCallback,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { useGantt } from "#/lib/gantt-context";
 import {
 	addDays,
@@ -35,39 +41,70 @@ export default function GanttChart() {
 		setModalItemId,
 	} = useGantt();
 	const scrollRef = useRef<HTMLDivElement>(null);
+	const [containerWidth, setContainerWidth] = useState(0);
 
 	const layout = useMemo(() => buildLayout(project), [project]);
 
-	// Calculate date range from all work items, with padding
+	// Measure the scrollable container so we can extend the date range
+	// far enough that the chart always fills the viewport on initial
+	// load (no awkward empty right margin). Re-measures on resize.
+	useLayoutEffect(() => {
+		const el = scrollRef.current;
+		if (!el) return;
+		setContainerWidth(el.clientWidth);
+		const observer = new ResizeObserver((entries) => {
+			for (const entry of entries) {
+				setContainerWidth(entry.contentRect.width);
+			}
+		});
+		observer.observe(el);
+		return () => observer.disconnect();
+	}, []);
+
+	// Calculate date range from all work items, with padding. Then
+	// extend the end date until we have enough columns to fill the
+	// visible width of the chart area.
 	const { startDate, columns } = useMemo(() => {
+		let start: Date;
+		let end: Date;
+
 		if (project.workItems.length === 0) {
 			const today = new Date();
-			const start = addDays(today, -7);
-			const end = addDays(today, 30);
-			if (viewMode === "weeks") {
-				return { startDate: start, columns: getWeeks(start, end) };
+			start = addDays(today, -14);
+			end = addDays(today, 60);
+		} else {
+			let minDate = new Date(8640000000000000);
+			let maxDate = new Date(-8640000000000000);
+			for (const item of project.workItems) {
+				const s = parseDate(item.startDate);
+				const e = parseDate(item.endDate);
+				if (s < minDate) minDate = s;
+				if (e > maxDate) maxDate = e;
 			}
-			return { startDate: start, columns: getWorkingDays(start, end) };
+			start = addDays(minDate, -7);
+			end = addDays(maxDate, 30);
 		}
 
-		let minDate = new Date(8640000000000000);
-		let maxDate = new Date(-8640000000000000);
+		const colW = viewMode === "days" ? COL_WIDTH_DAY : COL_WIDTH_WEEK;
+		const buildCols = (s: Date, e: Date) =>
+			viewMode === "weeks" ? getWeeks(s, e) : getWorkingDays(s, e);
 
-		for (const item of project.workItems) {
-			const s = parseDate(item.startDate);
-			const e = parseDate(item.endDate);
-			if (s < minDate) minDate = s;
-			if (e > maxDate) maxDate = e;
+		let cols = buildCols(start, end);
+
+		// Pad to fill the viewport. Loop is bounded by minCols so it
+		// always terminates; each iteration adds a week of calendar days.
+		if (containerWidth > 0) {
+			const minCols = Math.ceil(containerWidth / colW);
+			let guard = 0;
+			while (cols.length < minCols && guard < 200) {
+				end = addDays(end, 7);
+				cols = buildCols(start, end);
+				guard++;
+			}
 		}
 
-		const start = addDays(minDate, -7);
-		const end = addDays(maxDate, 14);
-
-		if (viewMode === "weeks") {
-			return { startDate: start, columns: getWeeks(start, end) };
-		}
-		return { startDate: start, columns: getWorkingDays(start, end) };
-	}, [project.workItems, viewMode]);
+		return { startDate: start, columns: cols };
+	}, [project.workItems, viewMode, containerWidth]);
 
 	const colWidth = viewMode === "days" ? COL_WIDTH_DAY : COL_WIDTH_WEEK;
 	const totalWidth = columns.length * colWidth;

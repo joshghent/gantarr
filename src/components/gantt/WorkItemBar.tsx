@@ -152,11 +152,13 @@ function WorkItemBarInner({
 							setEditingItemId(null);
 						}
 					}}
-					className="mx-3 w-full bg-transparent outline-none placeholder:text-current/60"
+					className="mx-3 w-full min-w-0 flex-1 bg-transparent outline-none placeholder:text-current/60"
 					style={{ color: getContrastText(color) }}
 				/>
 			) : (
-				<span className="truncate px-3">{item.title}</span>
+				<span className="min-w-0 flex-1 truncate whitespace-nowrap px-3">
+					{item.title}
+				</span>
 			)}
 
 			{/* Right resize handle */}
@@ -174,6 +176,7 @@ function WorkItemBarInner({
 			{/* Connector port — drag from here to create a dependency */}
 			{!isEditing && !isDraggingDep && (
 				<div
+					data-no-export="true"
 					className="absolute -right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 touch-none rounded-full border-2 border-white bg-muted-foreground opacity-70 group-hover:opacity-100 cursor-crosshair shadow-sm hover:bg-primary hover:scale-110 transition-all"
 					onMouseDown={(e) => onConnectorDragStart(e, item.id)}
 					onTouchStart={(e) => onConnectorDragStart(e, item.id)}
