@@ -6,6 +6,7 @@ import {
 	Download,
 	FileDown,
 	FileUp,
+	Github,
 	Image,
 	Plus,
 } from "lucide-react";
@@ -118,6 +119,25 @@ export default function GanttToolbar({
 					<FileDown className="mr-1 h-3.5 w-3.5" />
 					PDF
 				</Button>
+
+				<div className="mx-0.5 h-5 w-px bg-border/60" />
+
+				<a
+					href="https://github.com/joshghent/gantarr"
+					target="_blank"
+					rel="noopener noreferrer"
+					className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					title="View source on GitHub"
+				>
+					<Github className="h-3.5 w-3.5" />
+				</a>
+
+				<span
+					className="ml-1 font-display text-[10px] font-medium tracking-tight text-muted-foreground/70 tabular-nums"
+					title="Build time (UTC)"
+				>
+					{__BUILD_TIME__}
+				</span>
 			</div>
 		</div>
 	);
