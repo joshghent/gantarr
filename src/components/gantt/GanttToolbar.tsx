@@ -8,14 +8,24 @@ import {
 	FileDown,
 	FileUp,
 	Github,
+	HelpCircle,
 	Image,
 	Plus,
 } from "lucide-react";
 
+// Prefer "⌘" on macOS so the tooltips feel native. Server-rendered
+// strings can't touch window so fall back to "Ctrl" there.
+const MOD_KEY =
+	typeof navigator !== "undefined" && /mac/i.test(navigator.platform)
+		? "⌘"
+		: "Ctrl";
+
 export default function GanttToolbar({
 	chartRef,
+	onOpenHelp,
 }: {
 	chartRef: React.RefObject<HTMLDivElement | null>;
+	onOpenHelp: () => void;
 }) {
 	const {
 		project,
@@ -126,6 +136,7 @@ export default function GanttToolbar({
 				size="sm"
 				onClick={() => addWorkstream("New Workstream")}
 				className="font-display text-xs font-semibold tracking-tight"
+				title="Add workstream (N)"
 			>
 				<Plus className="mr-1 h-3.5 w-3.5" />
 				Workstream
@@ -142,6 +153,7 @@ export default function GanttToolbar({
 							: "text-muted-foreground hover:text-foreground"
 					} rounded-l-md`}
 					onClick={() => setViewMode("days")}
+					title="Day view (D)"
 				>
 					Days
 				</button>
@@ -153,13 +165,20 @@ export default function GanttToolbar({
 							: "text-muted-foreground hover:text-foreground"
 					} rounded-r-md`}
 					onClick={() => setViewMode("weeks")}
+					title="Week view (W)"
 				>
 					Weeks
 				</button>
 			</div>
 
 			<div className="ml-auto flex items-center gap-1">
-				<Button variant="ghost" size="sm" className="text-xs" onClick={handleSave}>
+				<Button
+					variant="ghost"
+					size="sm"
+					className="text-xs"
+					onClick={handleSave}
+					title={`Save project (${MOD_KEY}S)`}
+				>
 					<Download className="mr-1 h-3.5 w-3.5" />
 					Save
 				</Button>
@@ -168,6 +187,7 @@ export default function GanttToolbar({
 					size="sm"
 					className="text-xs"
 					onClick={() => fileInputRef.current?.click()}
+					title={`Load project (${MOD_KEY}O)`}
 				>
 					<FileUp className="mr-1 h-3.5 w-3.5" />
 					Load
@@ -182,16 +202,37 @@ export default function GanttToolbar({
 
 				<div className="mx-0.5 h-5 w-px bg-border/60" />
 
-				<Button variant="ghost" size="sm" className="text-xs" onClick={handleExportPng}>
+				<Button
+					variant="ghost"
+					size="sm"
+					className="text-xs"
+					onClick={handleExportPng}
+					title="Export as PNG"
+				>
 					<Image className="mr-1 h-3.5 w-3.5" />
 					PNG
 				</Button>
-				<Button variant="ghost" size="sm" className="text-xs" onClick={handleExportPdf}>
+				<Button
+					variant="ghost"
+					size="sm"
+					className="text-xs"
+					onClick={handleExportPdf}
+					title="Export as PDF"
+				>
 					<FileDown className="mr-1 h-3.5 w-3.5" />
 					PDF
 				</Button>
 
 				<div className="mx-0.5 h-5 w-px bg-border/60" />
+
+				<button
+					type="button"
+					onClick={onOpenHelp}
+					className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					title="Keyboard shortcuts (?)"
+				>
+					<HelpCircle className="h-3.5 w-3.5" />
+				</button>
 
 				<a
 					href="https://github.com/joshghent/gantarr"

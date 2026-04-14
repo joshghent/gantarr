@@ -28,8 +28,17 @@ function tasksOverlap(a: WorkItem, b: WorkItem): boolean {
 }
 
 /**
- * Build the row layout. Non-overlapping tasks within a workstream are
- * packed onto the same row (lane). Overlapping tasks get separate rows.
+ * Build the row layout.
+ *
+ * Tasks can carry an explicit `lane` (0 = first row within the
+ * workstream). Those are placed at exactly that lane, so double-clicks
+ * and drags feel deterministic — the bar lands where the user put it,
+ * not wherever the greedy packer wants it.
+ *
+ * Tasks without an explicit lane fall back to the original greedy
+ * lane-packing so legacy/imported projects keep working. Explicit-lane
+ * tasks are placed first so packers can honor their reservation.
+ *
  * Empty workstreams get a single placeholder row.
  */
 export function buildLayout(project: GanttProject): GanttLayout {
@@ -40,25 +49,50 @@ export function buildLayout(project: GanttProject): GanttLayout {
 	let rowIndex = 0;
 
 	for (const ws of sortedWs) {
-		const tasks = project.workItems
-			.filter((wi) => wi.workstreamId === ws.id)
-			.sort((a, b) => {
-				// Sort by start date first, then by end date
-				if (a.startDate !== b.startDate) return a.startDate < b.startDate ? -1 : 1;
-				return a.endDate < b.endDate ? -1 : 1;
-			});
+		const wsTasks = project.workItems.filter((wi) => wi.workstreamId === ws.id);
 
 		const startRow = rowIndex;
 
-		if (tasks.length === 0) {
-			// Empty workstream — one placeholder row
+		if (wsTasks.length === 0) {
 			rowIndex++;
 		} else {
-			// Pack tasks into lanes. Each lane tracks which tasks it contains.
 			const lanes: WorkItem[][] = [];
 
-			for (const task of tasks) {
-				// Find the first lane where this task doesn't overlap with any existing task
+			// Pass 1 — reserve explicit lanes, sorted by (lane, startDate)
+			// so deterministic order within each lane.
+			const explicit = wsTasks
+				.filter((t) => t.lane !== undefined)
+				.sort((a, b) => {
+					const la = a.lane ?? 0;
+					const lb = b.lane ?? 0;
+					if (la !== lb) return la - lb;
+					if (a.startDate !== b.startDate)
+						return a.startDate < b.startDate ? -1 : 1;
+					return a.endDate < b.endDate ? -1 : 1;
+				});
+
+			for (const task of explicit) {
+				const lane = task.lane ?? 0;
+				while (lanes.length <= lane) lanes.push([]);
+				lanes[lane].push(task);
+				taskPositions.set(task.id, {
+					workItemId: task.id,
+					workstreamId: ws.id,
+					rowIndex: startRow + lane,
+				});
+			}
+
+			// Pass 2 — greedy-pack the rest by start date, avoiding lanes
+			// that already overlap in time (including the explicit ones).
+			const implicit = wsTasks
+				.filter((t) => t.lane === undefined)
+				.sort((a, b) => {
+					if (a.startDate !== b.startDate)
+						return a.startDate < b.startDate ? -1 : 1;
+					return a.endDate < b.endDate ? -1 : 1;
+				});
+
+			for (const task of implicit) {
 				let placed = false;
 				for (let i = 0; i < lanes.length; i++) {
 					const overlaps = lanes[i].some((t) => tasksOverlap(t, task));
@@ -74,7 +108,6 @@ export function buildLayout(project: GanttProject): GanttLayout {
 					}
 				}
 				if (!placed) {
-					// Need a new lane
 					lanes.push([task]);
 					taskPositions.set(task.id, {
 						workItemId: task.id,

@@ -145,6 +145,7 @@ export function addWorkItem(
 	startDate?: string,
 	endDate?: string,
 	legendEntryId?: string,
+	lane?: number,
 ): GanttProject {
 	const start = startDate || today();
 	const end =
@@ -167,6 +168,7 @@ export function addWorkItem(
 		endDate: end,
 		legendEntryId: legendEntryId || null,
 		order,
+		...(lane !== undefined ? { lane } : {}),
 	};
 	return {
 		...project,
@@ -189,11 +191,13 @@ export function updateWorkItem(
 	};
 }
 
-/** Move a work item to a different workstream, appending to the end */
+/** Move a work item to a different workstream. If no target lane is
+ *  given the item loses its explicit lane so the packer places it. */
 export function moveWorkItemToWorkstream(
 	project: GanttProject,
 	itemId: string,
 	newWorkstreamId: string,
+	lane?: number,
 ): GanttProject {
 	const item = project.workItems.find((wi) => wi.id === itemId);
 	if (!item || item.workstreamId === newWorkstreamId) return project;
@@ -204,11 +208,16 @@ export function moveWorkItemToWorkstream(
 
 	return {
 		...project,
-		workItems: project.workItems.map((wi) =>
-			wi.id === itemId
-				? { ...wi, workstreamId: newWorkstreamId, order: newOrder }
-				: wi,
-		),
+		workItems: project.workItems.map((wi) => {
+			if (wi.id !== itemId) return wi;
+			const { lane: _prev, ...rest } = wi;
+			return {
+				...rest,
+				workstreamId: newWorkstreamId,
+				order: newOrder,
+				...(lane !== undefined ? { lane } : {}),
+			};
+		}),
 		updatedAt: new Date().toISOString(),
 	};
 }

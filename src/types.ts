@@ -12,6 +12,12 @@ export interface WorkItem {
 	endDate: string; // ISO date string YYYY-MM-DD
 	legendEntryId: string | null;
 	order: number; // position within its workstream
+	/**
+	 * Explicit lane within the workstream (0 = first row). When set, the
+	 * layout honors it instead of greedy-packing by date. Left undefined
+	 * for legacy projects loaded from JSON so they keep packing.
+	 */
+	lane?: number;
 }
 
 export interface Dependency {

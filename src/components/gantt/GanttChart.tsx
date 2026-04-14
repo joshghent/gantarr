@@ -16,11 +16,7 @@ import {
 	getWorkingDays,
 	parseDate,
 } from "#/lib/dates";
-import {
-	buildLayout,
-	getTaskRowIndex,
-	getWorkstreamAtRow,
-} from "#/lib/gantt-layout";
+import { buildLayout, getTaskRowIndex } from "#/lib/gantt-layout";
 import { ROW_HEIGHT, HEADER_HEIGHT } from "./GanttSidebar";
 import WorkItemBar from "./WorkItemBar";
 import DependencyArrows from "./DependencyArrows";
@@ -327,10 +323,26 @@ export default function GanttChart() {
 				}
 				if (rowsMoved !== 0) {
 					const targetRowIndex = d.originalRowIndex + rowsMoved;
-					const targetWsId = getWorkstreamAtRow(layout, targetRowIndex);
+					const targetBand = layout.bands.find(
+						(b) =>
+							targetRowIndex >= b.startRow &&
+							targetRowIndex < b.startRow + b.span,
+					);
 					const item = project.workItems.find((wi) => wi.id === d.itemId);
-					if (targetWsId && item && item.workstreamId !== targetWsId) {
-						moveWorkItemToWorkstream(d.itemId, targetWsId);
+					if (targetBand && item) {
+						const targetLane = targetRowIndex - targetBand.startRow;
+						if (targetBand.workstreamId !== item.workstreamId) {
+							// Cross-workstream drop — move and seat at the
+							// target lane within the new workstream.
+							moveWorkItemToWorkstream(
+								d.itemId,
+								targetBand.workstreamId,
+								targetLane,
+							);
+						} else {
+							// Intra-workstream reorder — just update the lane.
+							updateWorkItem(d.itemId, { lane: targetLane });
+						}
 					}
 				}
 			} else if (d.type === "resize-end") {
@@ -438,16 +450,23 @@ export default function GanttChart() {
 			const x = e.clientX - rect.left + scrollEl.scrollLeft;
 			const y = e.clientY - rect.top + scrollEl.scrollTop - HEADER_HEIGHT;
 
-			// Determine which row
+			// Determine which row — and therefore which workstream and
+			// which lane within it. The clicked lane becomes the new
+			// task's explicit `lane`, so the layout doesn't pack it
+			// onto the first available row.
 			const rowIndex = Math.floor(y / ROW_HEIGHT);
-			const wsId = getWorkstreamAtRow(layout, rowIndex);
-			if (!wsId) return;
+			const band = layout.bands.find(
+				(b) => rowIndex >= b.startRow && rowIndex < b.startRow + b.span,
+			);
+			if (!band) return;
+			const wsId = band.workstreamId;
+			const lane = rowIndex - band.startRow;
 
 			// Determine start date
 			const clickDate = getDateAtX(x);
 			const endDate = formatDate(addDays(parseDate(clickDate), 4));
 
-			addWorkItem(wsId, "New Task", clickDate, endDate);
+			addWorkItem(wsId, "New Task", clickDate, endDate, undefined, lane);
 		},
 		[layout, getDateAtX, addWorkItem],
 	);

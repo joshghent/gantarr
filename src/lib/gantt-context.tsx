@@ -40,9 +40,14 @@ interface GanttContextValue {
 		startDate?: string,
 		endDate?: string,
 		legendEntryId?: string,
+		lane?: number,
 	) => void;
 	updateWorkItem: (id: string, updates: Partial<Omit<WorkItem, "id">>) => void;
-	moveWorkItemToWorkstream: (itemId: string, newWorkstreamId: string) => void;
+	moveWorkItemToWorkstream: (
+		itemId: string,
+		newWorkstreamId: string,
+		lane?: number,
+	) => void;
 	deleteWorkItem: (id: string) => void;
 
 	// Dependency operations
@@ -140,6 +145,7 @@ export function GanttProvider({
 			startDate?: string,
 			endDate?: string,
 			legendEntryId?: string,
+			lane?: number,
 		) => {
 			mutate((p) =>
 				store.addWorkItem(
@@ -149,6 +155,7 @@ export function GanttProvider({
 					startDate,
 					endDate,
 					legendEntryId,
+					lane,
 				),
 			);
 		},
@@ -163,8 +170,10 @@ export function GanttProvider({
 	);
 
 	const moveWorkItemToWorkstream = useCallback(
-		(itemId: string, newWorkstreamId: string) => {
-			mutate((p) => store.moveWorkItemToWorkstream(p, itemId, newWorkstreamId));
+		(itemId: string, newWorkstreamId: string, lane?: number) => {
+			mutate((p) =>
+				store.moveWorkItemToWorkstream(p, itemId, newWorkstreamId, lane),
+			);
 		},
 		[mutate],
 	);
