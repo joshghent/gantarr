@@ -152,6 +152,10 @@ export default function GanttChart() {
 	);
 
 	// --- Task drag state ---
+	// Dragging is a pure *visual* preview — we never touch project state
+	// until mouseup, so buildLayout doesn't re-run and the other bars
+	// don't re-render. offsetX/offsetY are pixel deltas already snapped
+	// to the grid, applied to the dragged bar's position in the render.
 	const [dragState, setDragState] = useState<{
 		itemId: string;
 		type: "move" | "resize-start" | "resize-end";
@@ -160,8 +164,16 @@ export default function GanttChart() {
 		originalStartDate: string;
 		originalEndDate: string;
 		originalRowIndex: number;
+		offsetX: number;
+		offsetY: number;
 		didDrag: boolean;
 	} | null>(null);
+
+	// Stable mirror of dragState for use inside memoized callbacks that
+	// must NOT re-create when dragState changes (otherwise React.memo on
+	// WorkItemBar would fail and every bar re-renders each drag frame).
+	const dragStateRef = useRef(dragState);
+	dragStateRef.current = dragState;
 
 	// --- Dependency drag state ---
 	const [depDrag, setDepDrag] = useState<{
@@ -191,6 +203,8 @@ export default function GanttChart() {
 				originalStartDate: item.startDate,
 				originalEndDate: item.endDate,
 				originalRowIndex: rowIndex,
+				offsetX: 0,
+				offsetY: 0,
 				didDrag: false,
 			});
 		},
@@ -243,66 +257,39 @@ export default function GanttChart() {
 			}
 
 			if (!dragState) return;
-			const dx = clientX - dragState.startMouseX;
-			const dy = clientY - dragState.startMouseY;
-			const daysMoved = Math.round(dx / colWidth);
 
-			if (!dragState.didDrag && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
-				setDragState({ ...dragState, didDrag: true });
+			const rawDx = clientX - dragState.startMouseX;
+			const rawDy = clientY - dragState.startMouseY;
+
+			// Snap to grid — the dragged bar visually jumps day-by-day
+			// (and row-by-row for move drags), matching the discrete
+			// nature of Gantt data. State only updates when the snap
+			// boundary is crossed, so most mouse moves are free.
+			const snappedX = Math.round(rawDx / colWidth) * colWidth;
+			const snappedY =
+				dragState.type === "move"
+					? Math.round(rawDy / ROW_HEIGHT) * ROW_HEIGHT
+					: 0;
+
+			const didDrag =
+				dragState.didDrag || Math.abs(rawDx) > 4 || Math.abs(rawDy) > 4;
+
+			if (
+				didDrag === dragState.didDrag &&
+				snappedX === dragState.offsetX &&
+				snappedY === dragState.offsetY
+			) {
+				return;
 			}
 
-			const origStart = parseDate(dragState.originalStartDate);
-			const origEnd = parseDate(dragState.originalEndDate);
-
-			if (dragState.type === "move") {
-				if (daysMoved !== 0) {
-					const newStart = addDays(origStart, daysMoved);
-					const newEnd = addDays(origEnd, daysMoved);
-					updateWorkItem(dragState.itemId, {
-						startDate: formatDate(newStart),
-						endDate: formatDate(newEnd),
-					});
-				}
-				const rowsMoved = Math.round(dy / ROW_HEIGHT);
-				if (rowsMoved !== 0) {
-					const targetRowIndex = dragState.originalRowIndex + rowsMoved;
-					const targetWsId = getWorkstreamAtRow(layout, targetRowIndex);
-					const item = project.workItems.find(
-						(wi) => wi.id === dragState.itemId,
-					);
-					if (targetWsId && item && item.workstreamId !== targetWsId) {
-						moveWorkItemToWorkstream(dragState.itemId, targetWsId);
-					}
-				}
-			} else if (dragState.type === "resize-end") {
-				if (daysMoved !== 0) {
-					const newEnd = addDays(origEnd, daysMoved);
-					if (newEnd >= origStart) {
-						updateWorkItem(dragState.itemId, {
-							endDate: formatDate(newEnd),
-						});
-					}
-				}
-			} else if (dragState.type === "resize-start") {
-				if (daysMoved !== 0) {
-					const newStart = addDays(origStart, daysMoved);
-					if (newStart <= origEnd) {
-						updateWorkItem(dragState.itemId, {
-							startDate: formatDate(newStart),
-						});
-					}
-				}
-			}
+			setDragState({
+				...dragState,
+				offsetX: snappedX,
+				offsetY: snappedY,
+				didDrag,
+			});
 		},
-		[
-			depDrag,
-			dragState,
-			colWidth,
-			updateWorkItem,
-			moveWorkItemToWorkstream,
-			layout,
-			project.workItems,
-		],
+		[depDrag, dragState, colWidth],
 	);
 
 	const handleMouseMove = useCallback(
@@ -318,6 +305,61 @@ export default function GanttChart() {
 			handlePointerMove(touch.clientX, touch.clientY);
 		},
 		[handlePointerMove],
+	);
+
+	const commitDrag = useCallback(
+		(d: NonNullable<typeof dragState>) => {
+			if (!d.didDrag) return;
+
+			const daysMoved = Math.round(d.offsetX / colWidth);
+			const rowsMoved = Math.round(d.offsetY / ROW_HEIGHT);
+			const origStart = parseDate(d.originalStartDate);
+			const origEnd = parseDate(d.originalEndDate);
+
+			if (d.type === "move") {
+				if (daysMoved !== 0) {
+					const newStart = addDays(origStart, daysMoved);
+					const newEnd = addDays(origEnd, daysMoved);
+					updateWorkItem(d.itemId, {
+						startDate: formatDate(newStart),
+						endDate: formatDate(newEnd),
+					});
+				}
+				if (rowsMoved !== 0) {
+					const targetRowIndex = d.originalRowIndex + rowsMoved;
+					const targetWsId = getWorkstreamAtRow(layout, targetRowIndex);
+					const item = project.workItems.find((wi) => wi.id === d.itemId);
+					if (targetWsId && item && item.workstreamId !== targetWsId) {
+						moveWorkItemToWorkstream(d.itemId, targetWsId);
+					}
+				}
+			} else if (d.type === "resize-end") {
+				if (daysMoved !== 0) {
+					const newEnd = addDays(origEnd, daysMoved);
+					if (newEnd >= origStart) {
+						updateWorkItem(d.itemId, {
+							endDate: formatDate(newEnd),
+						});
+					}
+				}
+			} else if (d.type === "resize-start") {
+				if (daysMoved !== 0) {
+					const newStart = addDays(origStart, daysMoved);
+					if (newStart <= origEnd) {
+						updateWorkItem(d.itemId, {
+							startDate: formatDate(newStart),
+						});
+					}
+				}
+			}
+		},
+		[
+			colWidth,
+			updateWorkItem,
+			moveWorkItemToWorkstream,
+			layout,
+			project.workItems,
+		],
 	);
 
 	const handleMouseUp = useCallback(
@@ -336,9 +378,12 @@ export default function GanttChart() {
 				setDepDrag(null);
 				return;
 			}
-			setDragState(null);
+			if (dragState) {
+				commitDrag(dragState);
+				setDragState(null);
+			}
 		},
-		[depDrag, addDependency],
+		[depDrag, addDependency, dragState, commitDrag],
 	);
 
 	const handleMouseLeave = useCallback(() => {
@@ -364,9 +409,12 @@ export default function GanttChart() {
 				setDepDrag(null);
 				return;
 			}
-			setDragState(null);
+			if (dragState) {
+				commitDrag(dragState);
+				setDragState(null);
+			}
 		},
-		[depDrag, addDependency],
+		[depDrag, addDependency, dragState, commitDrag],
 	);
 
 	const handleChartClick = useCallback(
@@ -406,10 +454,13 @@ export default function GanttChart() {
 
 	const handleItemClick = useCallback(
 		(itemId: string) => {
-			if (dragState?.didDrag) return;
+			// Read dragState through a ref so this callback stays stable
+			// during a drag — otherwise every WorkItemBar would re-render
+			// on each drag frame because its onClick prop changed.
+			if (dragStateRef.current?.didDrag) return;
 			setSelectedItemId(itemId === selectedItemId ? null : itemId);
 		},
-		[dragState, selectedItemId, setSelectedItemId],
+		[selectedItemId, setSelectedItemId],
 	);
 
 	const handleItemDoubleClick = useCallback(
@@ -595,9 +646,24 @@ export default function GanttChart() {
 					{project.workItems.map((item) => {
 						const rowIndex = getTaskRowIndex(layout, item.id);
 						if (rowIndex === -1) return null;
-						const x = getX(item.startDate);
-						const width = getItemWidth(item);
-						const y = rowIndex * ROW_HEIGHT + 6;
+						let x = getX(item.startDate);
+						let width = getItemWidth(item);
+						let y = rowIndex * ROW_HEIGHT + 6;
+
+						// Drag preview — only the dragged bar's numbers
+						// change, so every other WorkItemBar stays shallow-
+						// equal and React.memo skips it.
+						if (dragState?.itemId === item.id && dragState.didDrag) {
+							if (dragState.type === "move") {
+								x += dragState.offsetX;
+								y += dragState.offsetY;
+							} else if (dragState.type === "resize-end") {
+								width = Math.max(colWidth, width + dragState.offsetX);
+							} else if (dragState.type === "resize-start") {
+								x += dragState.offsetX;
+								width = Math.max(colWidth, width - dragState.offsetX);
+							}
+						}
 
 						return (
 							<WorkItemBar
