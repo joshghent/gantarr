@@ -17,8 +17,14 @@ export default function GanttToolbar({
 }: {
 	chartRef: React.RefObject<HTMLDivElement | null>;
 }) {
-	const { project, viewMode, setViewMode, setProject, addWorkstream } =
-		useGantt();
+	const {
+		project,
+		viewMode,
+		setViewMode,
+		setProject,
+		addWorkstream,
+		markClean,
+	} = useGantt();
 	const fileInputRef = useRef<HTMLInputElement>(null);
 
 	// --- Project name editing ---
@@ -62,10 +68,19 @@ export default function GanttToolbar({
 		try {
 			const loaded = await loadJson(file);
 			setProject(loaded);
+			// A freshly-loaded project is our new baseline — batched
+			// with setProject in the same event handler so React lands
+			// on (project: loaded, isDirty: false) in a single render.
+			markClean();
 		} catch (_err) {
 			alert("Failed to load file. Make sure it's a valid .gantarr.json file.");
 		}
 		if (fileInputRef.current) fileInputRef.current.value = "";
+	};
+
+	const handleSave = () => {
+		downloadJson(project);
+		markClean();
 	};
 
 	const handleExportPng = async () => {
@@ -144,7 +159,7 @@ export default function GanttToolbar({
 			</div>
 
 			<div className="ml-auto flex items-center gap-1">
-				<Button variant="ghost" size="sm" className="text-xs" onClick={() => downloadJson(project)}>
+				<Button variant="ghost" size="sm" className="text-xs" onClick={handleSave}>
 					<Download className="mr-1 h-3.5 w-3.5" />
 					Save
 				</Button>

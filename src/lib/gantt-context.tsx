@@ -2,6 +2,7 @@ import {
 	createContext,
 	useCallback,
 	useContext,
+	useEffect,
 	useState,
 	type ReactNode,
 } from "react";
@@ -19,6 +20,10 @@ interface GanttContextValue {
 	viewMode: ViewMode;
 	setViewMode: (mode: ViewMode) => void;
 	setProject: (project: GanttProject) => void;
+
+	// Unsaved-changes tracking
+	isDirty: boolean;
+	markClean: () => void;
 
 	// Workstream operations
 	addWorkstream: (label: string) => void;
@@ -79,24 +84,54 @@ export function GanttProvider({
 	const [editingItemId, setEditingItemId] = useState<string | null>(null);
 	const [modalItemId, setModalItemId] = useState<string | null>(null);
 
-	const setProject = useCallback((p: GanttProject) => {
-		setProjectState(p);
-	}, []);
+	// Dirty tracking — the default project that ships on first load stays
+	// "clean" because we never call any mutator on it. Only explicit user
+	// actions (CRUD operations, rename, reorder) flip this to true.
+	const [isDirty, setIsDirty] = useState(false);
 
-	const addWorkstream = useCallback((label: string) => {
-		setProjectState((p) => store.addWorkstream(p, label));
-	}, []);
-
-	const updateWorkstream = useCallback(
-		(id: string, updates: Partial<Omit<Workstream, "id">>) => {
-			setProjectState((p) => store.updateWorkstream(p, id, updates));
+	// Internal helper: every store mutation routes through here so we
+	// don't have to remember to flip isDirty in every callback.
+	const mutate = useCallback(
+		(updater: (p: GanttProject) => GanttProject) => {
+			setProjectState(updater);
+			setIsDirty(true);
 		},
 		[],
 	);
 
-	const deleteWorkstream = useCallback((id: string) => {
-		setProjectState((p) => store.deleteWorkstream(p, id));
+	// Whole-project replacement used for mutations that aren't a simple
+	// single-field edit (e.g. drag-to-reorder in the sidebar, rename in
+	// the toolbar). Also marks dirty — the only way to *reset* dirty is
+	// to call markClean() explicitly after save or load.
+	const setProject = useCallback((p: GanttProject) => {
+		setProjectState(p);
+		setIsDirty(true);
 	}, []);
+
+	const markClean = useCallback(() => {
+		setIsDirty(false);
+	}, []);
+
+	const addWorkstream = useCallback(
+		(label: string) => {
+			mutate((p) => store.addWorkstream(p, label));
+		},
+		[mutate],
+	);
+
+	const updateWorkstream = useCallback(
+		(id: string, updates: Partial<Omit<Workstream, "id">>) => {
+			mutate((p) => store.updateWorkstream(p, id, updates));
+		},
+		[mutate],
+	);
+
+	const deleteWorkstream = useCallback(
+		(id: string) => {
+			mutate((p) => store.deleteWorkstream(p, id));
+		},
+		[mutate],
+	);
 
 	const addWorkItem = useCallback(
 		(
@@ -106,7 +141,7 @@ export function GanttProvider({
 			endDate?: string,
 			legendEntryId?: string,
 		) => {
-			setProjectState((p) =>
+			mutate((p) =>
 				store.addWorkItem(
 					p,
 					workstreamId,
@@ -117,56 +152,82 @@ export function GanttProvider({
 				),
 			);
 		},
-		[],
+		[mutate],
 	);
 
 	const updateWorkItem = useCallback(
 		(id: string, updates: Partial<Omit<WorkItem, "id">>) => {
-			setProjectState((p) => store.updateWorkItem(p, id, updates));
+			mutate((p) => store.updateWorkItem(p, id, updates));
 		},
-		[],
+		[mutate],
 	);
 
 	const moveWorkItemToWorkstream = useCallback(
 		(itemId: string, newWorkstreamId: string) => {
-			setProjectState((p) =>
-				store.moveWorkItemToWorkstream(p, itemId, newWorkstreamId),
-			);
+			mutate((p) => store.moveWorkItemToWorkstream(p, itemId, newWorkstreamId));
 		},
-		[],
+		[mutate],
 	);
 
-	const deleteWorkItem = useCallback((id: string) => {
-		setProjectState((p) => store.deleteWorkItem(p, id));
-		setSelectedItemId(null);
-		setModalItemId(null);
-	}, []);
+	const deleteWorkItem = useCallback(
+		(id: string) => {
+			mutate((p) => store.deleteWorkItem(p, id));
+			setSelectedItemId(null);
+			setModalItemId(null);
+		},
+		[mutate],
+	);
 
 	const addDependency = useCallback(
 		(fromItemId: string, toItemId: string) => {
-			setProjectState((p) => store.addDependency(p, fromItemId, toItemId));
+			mutate((p) => store.addDependency(p, fromItemId, toItemId));
 		},
-		[],
+		[mutate],
 	);
 
-	const deleteDependency = useCallback((id: string) => {
-		setProjectState((p) => store.deleteDependency(p, id));
-	}, []);
+	const deleteDependency = useCallback(
+		(id: string) => {
+			mutate((p) => store.deleteDependency(p, id));
+		},
+		[mutate],
+	);
 
-	const addLegendEntry = useCallback((label: string, color: string) => {
-		setProjectState((p) => store.addLegendEntry(p, label, color));
-	}, []);
+	const addLegendEntry = useCallback(
+		(label: string, color: string) => {
+			mutate((p) => store.addLegendEntry(p, label, color));
+		},
+		[mutate],
+	);
 
 	const updateLegendEntry = useCallback(
 		(id: string, updates: Partial<Omit<LegendEntry, "id">>) => {
-			setProjectState((p) => store.updateLegendEntry(p, id, updates));
+			mutate((p) => store.updateLegendEntry(p, id, updates));
 		},
-		[],
+		[mutate],
 	);
 
-	const deleteLegendEntry = useCallback((id: string) => {
-		setProjectState((p) => store.deleteLegendEntry(p, id));
-	}, []);
+	const deleteLegendEntry = useCallback(
+		(id: string) => {
+			mutate((p) => store.deleteLegendEntry(p, id));
+		},
+		[mutate],
+	);
+
+	// Browser-level unsaved-changes guard. Only attached while the
+	// project is actually dirty so a clean session never nags.
+	// Modern browsers ignore the custom message and show a generic
+	// "Leave site?" prompt — setting returnValue is required in
+	// Chrome/Edge, returning the string is the legacy Firefox path.
+	useEffect(() => {
+		if (!isDirty) return;
+		const handler = (e: BeforeUnloadEvent) => {
+			e.preventDefault();
+			e.returnValue = "";
+			return "";
+		};
+		window.addEventListener("beforeunload", handler);
+		return () => window.removeEventListener("beforeunload", handler);
+	}, [isDirty]);
 
 	return (
 		<GanttContext.Provider
@@ -175,6 +236,8 @@ export function GanttProvider({
 				viewMode,
 				setViewMode,
 				setProject,
+				isDirty,
+				markClean,
 				addWorkstream,
 				updateWorkstream,
 				deleteWorkstream,
