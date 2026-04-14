@@ -10,7 +10,7 @@ import TaskModal from "./TaskModal";
 
 function GanttEditorInner() {
 	const chartRef = useRef<HTMLDivElement>(null);
-	const { selectedItemId, connectingFrom } = useGantt();
+	const { selectedItemId } = useGantt();
 
 	return (
 		<div className="flex h-screen flex-col">
@@ -19,9 +19,7 @@ function GanttEditorInner() {
 				<div ref={chartRef} className="flex flex-1 overflow-hidden">
 					<GanttSidebar />
 					<div className="flex flex-1 flex-col overflow-hidden">
-						<div
-							className={`flex flex-1 overflow-hidden ${connectingFrom ? "cursor-crosshair" : ""}`}
-						>
+						<div className="flex flex-1 overflow-hidden">
 							<GanttChart />
 						</div>
 						<LegendPanel />

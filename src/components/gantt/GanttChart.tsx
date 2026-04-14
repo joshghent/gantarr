@@ -10,7 +10,11 @@ import {
 	getWorkingDays,
 	parseDate,
 } from "#/lib/dates";
-import { buildLayout, getTaskRowIndex, getWorkstreamAtRow } from "#/lib/gantt-layout";
+import {
+	buildLayout,
+	getTaskRowIndex,
+	getWorkstreamAtRow,
+} from "#/lib/gantt-layout";
 import { ROW_HEIGHT, HEADER_HEIGHT } from "./GanttSidebar";
 import WorkItemBar from "./WorkItemBar";
 import DependencyArrows from "./DependencyArrows";
@@ -22,12 +26,11 @@ export default function GanttChart() {
 	const {
 		project,
 		viewMode,
+		addWorkItem,
 		updateWorkItem,
 		moveWorkItemToWorkstream,
 		selectedItemId,
 		setSelectedItemId,
-		connectingFrom,
-		setConnectingFrom,
 		addDependency,
 		setModalItemId,
 	} = useGantt();
@@ -78,7 +81,6 @@ export default function GanttChart() {
 				const workingDays = getWorkingDays(startDate, date);
 				return Math.max(0, (workingDays.length - 1) * colWidth);
 			}
-			// For weeks: find which week the date falls in
 			for (let i = 0; i < columns.length; i++) {
 				const weekStart = columns[i];
 				const weekEnd = addDays(weekStart, 6);
@@ -94,6 +96,15 @@ export default function GanttChart() {
 		[columns, colWidth, startDate, totalWidth, viewMode],
 	);
 
+	/** Inverse of getX: given an x pixel offset, return the closest date string */
+	const getDateAtX = useCallback(
+		(x: number): string => {
+			const colIndex = Math.max(0, Math.min(Math.round(x / colWidth), columns.length - 1));
+			return formatDate(columns[colIndex]);
+		},
+		[colWidth, columns],
+	);
+
 	const getItemWidth = useCallback(
 		(item: { startDate: string; endDate: string }): number => {
 			const x1 = getX(item.startDate);
@@ -103,7 +114,7 @@ export default function GanttChart() {
 		[getX, colWidth],
 	);
 
-	// Drag state
+	// --- Task drag state ---
 	const [dragState, setDragState] = useState<{
 		itemId: string;
 		type: "move" | "resize-start" | "resize-end";
@@ -113,6 +124,15 @@ export default function GanttChart() {
 		originalEndDate: string;
 		originalRowIndex: number;
 		didDrag: boolean;
+	} | null>(null);
+
+	// --- Dependency drag state ---
+	const [depDrag, setDepDrag] = useState<{
+		fromItemId: string;
+		fromX: number;
+		fromY: number;
+		mouseX: number;
+		mouseY: number;
 	} | null>(null);
 
 	const handleMouseDown = useCallback(
@@ -140,14 +160,56 @@ export default function GanttChart() {
 		[project.workItems, layout],
 	);
 
+	/** Start dragging a dependency arrow from a task's connector port */
+	const handleConnectorDragStart = useCallback(
+		(e: React.MouseEvent | React.TouchEvent, itemId: string) => {
+			e.stopPropagation();
+			e.preventDefault();
+			const item = project.workItems.find((wi) => wi.id === itemId);
+			if (!item) return;
+			const rowIndex = getTaskRowIndex(layout, itemId);
+			if (rowIndex === -1) return;
+			const fromX = getX(item.startDate) + getItemWidth(item);
+			const fromY = rowIndex * ROW_HEIGHT + ROW_HEIGHT / 2;
+			const scrollEl = scrollRef.current;
+			const rect = scrollEl?.getBoundingClientRect();
+			const point = "touches" in e ? e.touches[0] : e;
+			setDepDrag({
+				fromItemId: itemId,
+				fromX,
+				fromY,
+				mouseX: rect
+					? point.clientX - rect.left + (scrollEl?.scrollLeft ?? 0)
+					: fromX,
+				mouseY: rect
+					? point.clientY - rect.top + (scrollEl?.scrollTop ?? 0) - HEADER_HEIGHT
+					: fromY,
+			});
+		},
+		[project.workItems, layout, getX, getItemWidth],
+	);
+
 	const handlePointerMove = useCallback(
 		(clientX: number, clientY: number) => {
+			// Dependency drag
+			if (depDrag) {
+				const scrollEl = scrollRef.current;
+				const rect = scrollEl?.getBoundingClientRect();
+				if (rect) {
+					setDepDrag({
+						...depDrag,
+						mouseX: clientX - rect.left + (scrollEl?.scrollLeft ?? 0),
+						mouseY: clientY - rect.top + (scrollEl?.scrollTop ?? 0) - HEADER_HEIGHT,
+					});
+				}
+				return;
+			}
+
 			if (!dragState) return;
 			const dx = clientX - dragState.startMouseX;
 			const dy = clientY - dragState.startMouseY;
 			const daysMoved = Math.round(dx / colWidth);
 
-			// Mark as actually dragged if moved more than a couple of pixels
 			if (!dragState.didDrag && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
 				setDragState({ ...dragState, didDrag: true });
 			}
@@ -164,7 +226,6 @@ export default function GanttChart() {
 						endDate: formatDate(newEnd),
 					});
 				}
-				// Vertical drag: change workstream
 				const rowsMoved = Math.round(dy / ROW_HEIGHT);
 				if (rowsMoved !== 0) {
 					const targetRowIndex = dragState.originalRowIndex + rowsMoved;
@@ -197,6 +258,7 @@ export default function GanttChart() {
 			}
 		},
 		[
+			depDrag,
 			dragState,
 			colWidth,
 			updateWorkItem,
@@ -208,59 +270,109 @@ export default function GanttChart() {
 
 	const handleMouseMove = useCallback(
 		(e: React.MouseEvent) => {
-			if (!dragState) return;
 			handlePointerMove(e.clientX, e.clientY);
 		},
-		[dragState, handlePointerMove],
+		[handlePointerMove],
 	);
 
 	const handleTouchMove = useCallback(
 		(e: React.TouchEvent) => {
-			if (!dragState) return;
 			const touch = e.touches[0];
 			handlePointerMove(touch.clientX, touch.clientY);
 		},
-		[dragState, handlePointerMove],
+		[handlePointerMove],
 	);
 
-	const handleMouseUp = useCallback(() => {
+	const handleMouseUp = useCallback(
+		(e: React.MouseEvent) => {
+			// Finish dependency drag
+			if (depDrag) {
+				// Check if mouse is over a task bar
+				const target = document.elementFromPoint(e.clientX, e.clientY);
+				const taskEl = target?.closest("[data-workitem]");
+				if (taskEl) {
+					const toItemId = taskEl.getAttribute("data-workitem");
+					if (toItemId && toItemId !== depDrag.fromItemId) {
+						addDependency(depDrag.fromItemId, toItemId);
+					}
+				}
+				setDepDrag(null);
+				return;
+			}
+			setDragState(null);
+		},
+		[depDrag, addDependency],
+	);
+
+	const handleMouseLeave = useCallback(() => {
 		setDragState(null);
+		setDepDrag(null);
 	}, []);
+
+	const handleTouchEnd = useCallback(
+		(e: React.TouchEvent) => {
+			// Finish dependency drag on touch — same logic as handleMouseUp
+			if (depDrag) {
+				const touch = e.changedTouches[0];
+				if (touch) {
+					const target = document.elementFromPoint(touch.clientX, touch.clientY);
+					const taskEl = target?.closest("[data-workitem]");
+					if (taskEl) {
+						const toItemId = taskEl.getAttribute("data-workitem");
+						if (toItemId && toItemId !== depDrag.fromItemId) {
+							addDependency(depDrag.fromItemId, toItemId);
+						}
+					}
+				}
+				setDepDrag(null);
+				return;
+			}
+			setDragState(null);
+		},
+		[depDrag, addDependency],
+	);
 
 	const handleChartClick = useCallback(
 		(e: React.MouseEvent) => {
-			if (connectingFrom) {
-				setConnectingFrom(null);
-				return;
-			}
 			if ((e.target as HTMLElement).closest("[data-workitem]") === null) {
 				setSelectedItemId(null);
 			}
 		},
-		[connectingFrom, setConnectingFrom, setSelectedItemId],
+		[setSelectedItemId],
+	);
+
+	/** Double-click on empty area to create a new task */
+	const handleChartDoubleClick = useCallback(
+		(e: React.MouseEvent) => {
+			// Ignore if clicking on a task bar
+			if ((e.target as HTMLElement).closest("[data-workitem]")) return;
+
+			const scrollEl = scrollRef.current;
+			if (!scrollEl) return;
+			const rect = scrollEl.getBoundingClientRect();
+			const x = e.clientX - rect.left + scrollEl.scrollLeft;
+			const y = e.clientY - rect.top + scrollEl.scrollTop - HEADER_HEIGHT;
+
+			// Determine which row
+			const rowIndex = Math.floor(y / ROW_HEIGHT);
+			const wsId = getWorkstreamAtRow(layout, rowIndex);
+			if (!wsId) return;
+
+			// Determine start date
+			const clickDate = getDateAtX(x);
+			const endDate = formatDate(addDays(parseDate(clickDate), 4));
+
+			addWorkItem(wsId, "New Task", clickDate, endDate);
+		},
+		[layout, getDateAtX, addWorkItem],
 	);
 
 	const handleItemClick = useCallback(
 		(itemId: string) => {
-			// If a drag actually happened, don't treat as click
 			if (dragState?.didDrag) return;
-			if (connectingFrom) {
-				if (connectingFrom !== itemId) {
-					addDependency(connectingFrom, itemId);
-				}
-				setConnectingFrom(null);
-				return;
-			}
 			setSelectedItemId(itemId === selectedItemId ? null : itemId);
 		},
-		[
-			dragState,
-			connectingFrom,
-			setConnectingFrom,
-			addDependency,
-			selectedItemId,
-			setSelectedItemId,
-		],
+		[dragState, selectedItemId, setSelectedItemId],
 	);
 
 	const handleItemDoubleClick = useCallback(
@@ -270,7 +382,7 @@ export default function GanttChart() {
 		[setModalItemId],
 	);
 
-	// Group columns by month for the top header row
+	// Group columns by month
 	const monthGroups = useMemo(() => {
 		const groups: { label: string; startIdx: number; span: number }[] = [];
 		let currentMonth = -1;
@@ -296,10 +408,11 @@ export default function GanttChart() {
 			className="flex-1 overflow-auto"
 			onMouseMove={handleMouseMove}
 			onMouseUp={handleMouseUp}
-			onMouseLeave={handleMouseUp}
+			onMouseLeave={handleMouseLeave}
 			onTouchMove={handleTouchMove}
-			onTouchEnd={handleMouseUp}
+			onTouchEnd={handleTouchEnd}
 			onClick={handleChartClick}
+			onDoubleClick={handleChartDoubleClick}
 		>
 			<div
 				style={{ width: totalWidth, minHeight: totalHeight + HEADER_HEIGHT }}
@@ -307,13 +420,13 @@ export default function GanttChart() {
 			>
 				{/* Month header row */}
 				<div
-					className="sticky top-0 z-20 flex border-b border-border bg-card"
+					className="sticky top-0 z-20 flex border-b border-border/70 bg-card/95 backdrop-blur-sm"
 					style={{ height: HEADER_HEIGHT / 2 }}
 				>
 					{monthGroups.map((g) => (
 						<div
 							key={`${g.label}-${g.startIdx}`}
-							className="flex items-center justify-center border-r border-border text-xs font-semibold text-foreground"
+							className="flex items-center justify-center border-r border-border/50 font-display text-[11px] font-bold tracking-wide text-foreground"
 							style={{ width: g.span * colWidth }}
 						>
 							{g.label}
@@ -323,7 +436,7 @@ export default function GanttChart() {
 
 				{/* Day/Week header row */}
 				<div
-					className="sticky z-20 flex border-b border-border bg-card"
+					className="sticky z-20 flex border-b border-border/70 bg-card/95 backdrop-blur-sm"
 					style={{ height: HEADER_HEIGHT / 2, top: HEADER_HEIGHT / 2 }}
 				>
 					{columns.map((col) => {
@@ -331,9 +444,9 @@ export default function GanttChart() {
 						return (
 							<div
 								key={formatDate(col)}
-								className={`flex flex-col items-center justify-center border-r border-border text-[10px] leading-tight ${
+								className={`flex flex-col items-center justify-center border-r border-border/40 text-[10px] leading-tight ${
 									isToday
-										? "bg-primary/10 font-semibold text-primary"
+										? "bg-primary/8 font-semibold text-primary"
 										: "text-muted-foreground"
 								}`}
 								style={{ width: colWidth }}
@@ -341,7 +454,7 @@ export default function GanttChart() {
 								{viewMode === "days" ? (
 									<>
 										<span>{formatDayName(col)}</span>
-										<span>{col.getDate()}</span>
+										<span className="font-medium">{col.getDate()}</span>
 									</>
 								) : (
 									<span>{formatShortDate(col)}</span>
@@ -352,24 +465,21 @@ export default function GanttChart() {
 				</div>
 
 				{/* Grid area */}
-				<div
-					className="relative"
-					style={{ minHeight: totalHeight }}
-				>
+				<div className="relative" style={{ minHeight: totalHeight }}>
 					{/* Row backgrounds */}
-					{layout.rows.map((row, i) => (
+					{Array.from({ length: layout.totalRows }, (_, i) => (
 						<div
-							key={`row-${row.workstreamId}-${row.workItemId ?? "empty"}-${i}`}
-							className={`border-b border-border ${i % 2 === 0 ? "bg-card" : "bg-muted/30"}`}
+							key={`row-bg-${i}`}
+							className={`border-b border-border/30 ${i % 2 === 0 ? "bg-card" : "bg-muted/15"}`}
 							style={{ height: ROW_HEIGHT }}
 						/>
 					))}
 
-					{/* Workstream divider lines (between bands) */}
+					{/* Workstream divider lines */}
 					{layout.bands.slice(0, -1).map((band) => (
 						<div
 							key={`divider-${band.workstreamId}`}
-							className="pointer-events-none absolute left-0 right-0 border-b-2 border-border/60"
+							className="pointer-events-none absolute left-0 right-0 border-b border-border/50"
 							style={{
 								top: (band.startRow + band.span) * ROW_HEIGHT - 1,
 							}}
@@ -383,10 +493,8 @@ export default function GanttChart() {
 							return (
 								<div
 									key={formatDate(col)}
-									className={`absolute top-0 bottom-0 border-r ${
-										isToday
-											? "border-primary/30"
-											: "border-border/50"
+									className={`absolute top-0 bottom-0 ${
+										isToday ? "border-r border-primary/20" : "border-r border-border/25"
 									}`}
 									style={{ left: (i + 1) * colWidth }}
 								/>
@@ -400,7 +508,7 @@ export default function GanttChart() {
 						if (todayX >= 0 && todayX <= totalWidth) {
 							return (
 								<div
-									className="pointer-events-none absolute top-0 bottom-0 z-10 w-0.5 bg-primary/60"
+									className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-primary/50"
 									style={{ left: todayX + colWidth / 2 }}
 								/>
 							);
@@ -416,7 +524,37 @@ export default function GanttChart() {
 						layout={layout}
 					/>
 
-					{/* Work item bars (one per row) */}
+					{/* Temporary dependency drag line */}
+					{depDrag && (
+						<svg
+							className="pointer-events-none absolute inset-0"
+							style={{
+								width: Math.max(depDrag.fromX, depDrag.mouseX) + 30,
+								height: Math.max(depDrag.fromY, depDrag.mouseY) + 30,
+								zIndex: 20,
+							}}
+						>
+							<line
+								x1={depDrag.fromX}
+								y1={depDrag.fromY}
+								x2={depDrag.mouseX}
+								y2={depDrag.mouseY}
+								stroke="#3b82f6"
+								strokeWidth={2}
+								strokeDasharray="6 3"
+								opacity={0.8}
+							/>
+							<circle
+								cx={depDrag.mouseX}
+								cy={depDrag.mouseY}
+								r={4}
+								fill="#3b82f6"
+								opacity={0.8}
+							/>
+						</svg>
+					)}
+
+					{/* Work item bars */}
 					{project.workItems.map((item) => {
 						const rowIndex = getTaskRowIndex(layout, item.id);
 						if (rowIndex === -1) return null;
@@ -433,11 +571,11 @@ export default function GanttChart() {
 								width={width}
 								height={ROW_HEIGHT - 12}
 								isSelected={selectedItemId === item.id}
-								isConnecting={connectingFrom !== null}
-								isConnectSource={connectingFrom === item.id}
+								isDraggingDep={depDrag !== null}
 								onMouseDown={handleMouseDown}
 								onClick={handleItemClick}
 								onDoubleClick={handleItemDoubleClick}
+								onConnectorDragStart={handleConnectorDragStart}
 							/>
 						);
 					})}

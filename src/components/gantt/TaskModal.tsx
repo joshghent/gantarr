@@ -69,7 +69,7 @@ export default function TaskModal() {
 		>
 			<DialogContent className="sm:max-w-md">
 				<DialogHeader>
-					<DialogTitle>Edit Task</DialogTitle>
+					<DialogTitle className="font-display tracking-tight">Edit Task</DialogTitle>
 				</DialogHeader>
 
 				<div className="space-y-4">

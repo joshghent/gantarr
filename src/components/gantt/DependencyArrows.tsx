@@ -67,7 +67,7 @@ export default function DependencyArrows({
 					refY="3"
 					orient="auto"
 				>
-					<polygon points="0 0, 8 3, 0 6" fill="#64748b" />
+					<polygon points="0 0, 8 3, 0 6" fill="#5a7a80" />
 				</marker>
 			</defs>
 			{arrows.map((arrow) => {
@@ -94,7 +94,7 @@ export default function DependencyArrows({
 					<path
 						key={arrow.id}
 						d={path}
-						stroke="#64748b"
+						stroke="#5a7a80"
 						strokeWidth={1.5}
 						fill="none"
 						markerEnd="url(#arrowhead)"

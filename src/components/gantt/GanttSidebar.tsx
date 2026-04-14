@@ -10,6 +10,7 @@ const HEADER_HEIGHT = 48;
 export default function GanttSidebar() {
 	const {
 		project,
+		addWorkstream,
 		updateWorkstream,
 		deleteWorkstream,
 		addWorkItem,
@@ -70,7 +71,6 @@ export default function GanttSidebar() {
 			e.preventDefault();
 			e.stopPropagation();
 
-			// Snapshot band positions relative to container
 			if (containerRef.current) {
 				const containerRect = containerRef.current.getBoundingClientRect();
 				bandRectsRef.current = layout.bands.map((band) => ({
@@ -90,7 +90,6 @@ export default function GanttSidebar() {
 			const mouseY = e.clientY;
 			const bands = bandRectsRef.current;
 
-			// Find which band the cursor is over
 			let targetIdx: number | null = null;
 			for (let i = 0; i < bands.length; i++) {
 				const mid = bands[i].top + bands[i].height / 2;
@@ -101,7 +100,6 @@ export default function GanttSidebar() {
 			}
 			if (targetIdx === null) targetIdx = bands.length;
 
-			// Don't show drop indicator at the band's own position or the one right after
 			const dragIdx = sortedWs.findIndex((ws) => ws.id === dragWsId);
 			if (targetIdx === dragIdx || targetIdx === dragIdx + 1) {
 				setDropTargetIdx(null);
@@ -122,7 +120,6 @@ export default function GanttSidebar() {
 					dropTargetIdx > dragIdx ? dropTargetIdx - 1 : dropTargetIdx;
 				reordered.splice(insertAt, 0, moved);
 
-				// Apply new order
 				const updated = {
 					...project,
 					workstreams: reordered.map((ws, i) => ({ ...ws, order: i })),
@@ -135,7 +132,6 @@ export default function GanttSidebar() {
 		setDropTargetIdx(null);
 	}, [dragWsId, dropTargetIdx, sortedWs, project, setProject]);
 
-	// Compute where to draw the drop indicator line
 	const getDropIndicatorTop = (): number | null => {
 		if (dropTargetIdx === null) return null;
 		if (dropTargetIdx >= layout.bands.length) {
@@ -156,7 +152,7 @@ export default function GanttSidebar() {
 		>
 			{/* Header */}
 			<div
-				className="flex items-center border-b border-border px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+				className="flex items-center border-b border-border px-3 font-display text-[11px] font-bold uppercase tracking-widest text-muted-foreground"
 				style={{ height: HEADER_HEIGHT }}
 			>
 				Workstreams
@@ -165,7 +161,7 @@ export default function GanttSidebar() {
 			<div
 				ref={containerRef}
 				className="relative flex-1 overflow-y-auto"
-				style={{ minHeight: layout.totalRows * ROW_HEIGHT }}
+				style={{ minHeight: layout.totalRows * ROW_HEIGHT + 40 }}
 			>
 				{/* Workstream bands */}
 				{layout.bands.map((band, bandIdx) => {
@@ -193,7 +189,6 @@ export default function GanttSidebar() {
 						>
 							{/* Top bar: grip handle + actions */}
 							<div className="flex items-center gap-0.5 px-1 pt-1">
-								{/* Grip handle for drag reorder */}
 								<div
 									className="cursor-grab rounded p-0.5 text-white/50 hover:bg-white/20 hover:text-white active:cursor-grabbing"
 									onMouseDown={(e) =>
@@ -206,7 +201,6 @@ export default function GanttSidebar() {
 
 								<div className="flex-1" />
 
-								{/* Action buttons — always visible at top */}
 								<button
 									type="button"
 									onClick={() => addWorkItem(ws.id, "New Task")}
@@ -247,7 +241,7 @@ export default function GanttSidebar() {
 										className="h-7 bg-white/90 text-sm text-gray-900"
 									/>
 								) : (
-									<span className="select-none text-sm font-bold leading-tight text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.3)]">
+									<span className="select-none font-display text-[13px] font-bold leading-tight tracking-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
 										{ws.label}
 									</span>
 								)}
@@ -265,6 +259,17 @@ export default function GanttSidebar() {
 						<div className="h-1 rounded-full bg-white shadow-[0_0_6px_rgba(0,0,0,0.5)]" />
 					</div>
 				)}
+
+				{/* + Workstream button below the last band */}
+				<button
+					type="button"
+					onClick={() => addWorkstream("New Workstream")}
+					className="absolute left-0 right-0 flex items-center justify-center gap-1.5 border-t border-dashed border-border py-2.5 font-display text-[11px] font-semibold tracking-tight text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					style={{ top: layout.totalRows * ROW_HEIGHT }}
+				>
+					<Plus className="h-3.5 w-3.5" />
+					Workstream
+				</button>
 			</div>
 		</div>
 	);
