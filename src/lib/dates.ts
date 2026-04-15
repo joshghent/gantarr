@@ -39,6 +39,24 @@ export function getWorkingDays(start: Date, end: Date): Date[] {
 	return days;
 }
 
+/** Get every calendar day (including weekends) between two dates, inclusive. */
+export function getDays(start: Date, end: Date): Date[] {
+	const days: Date[] = [];
+	const current = new Date(start);
+	while (current <= end) {
+		days.push(new Date(current));
+		current.setDate(current.getDate() + 1);
+	}
+	return days;
+}
+
+/** Whole calendar days between two dates (ignores time-of-day / DST jitter). */
+export function daysBetween(start: Date, end: Date): number {
+	const a = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+	const b = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate());
+	return Math.round((b - a) / (1000 * 60 * 60 * 24));
+}
+
 /** Move to next working day if on a weekend */
 export function toWorkingDay(date: Date): Date {
 	const result = new Date(date);

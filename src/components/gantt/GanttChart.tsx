@@ -8,13 +8,13 @@ import {
 import { useGantt } from "#/lib/gantt-context";
 import {
 	addDays,
-	addWorkingDays,
+	daysBetween,
 	formatDate,
 	formatDayName,
 	formatMonthYear,
 	formatShortDate,
+	getDays,
 	getWeeks,
-	getWorkingDays,
 	parseDate,
 } from "#/lib/dates";
 import { buildLayout, getTaskRowIndex } from "#/lib/gantt-layout";
@@ -23,7 +23,7 @@ import WorkItemBar from "./WorkItemBar";
 import DependencyArrows from "./DependencyArrows";
 
 const COL_WIDTH_DAY = 36;
-const COL_WIDTH_WEEK = 110;
+const COL_WIDTH_WEEK = 112; // 16px per day × 7 — keeps the math clean
 
 export default function GanttChart() {
 	const {
@@ -84,7 +84,7 @@ export default function GanttChart() {
 
 		const colW = viewMode === "days" ? COL_WIDTH_DAY : COL_WIDTH_WEEK;
 		const buildCols = (s: Date, e: Date) =>
-			viewMode === "weeks" ? getWeeks(s, e) : getWorkingDays(s, e);
+			viewMode === "weeks" ? getWeeks(s, e) : getDays(s, e);
 
 		let cols = buildCols(start, end);
 
@@ -104,48 +104,46 @@ export default function GanttChart() {
 	}, [project.workItems, viewMode, containerWidth]);
 
 	const colWidth = viewMode === "days" ? COL_WIDTH_DAY : COL_WIDTH_WEEK;
+	// One calendar day's pixel width. In day view a column IS a day,
+	// so they're equal. In week view a column is seven days, so days
+	// are a seventh the width. Both layouts then share a single
+	// positioning formula: `daysFromStart * dayWidth`.
+	const dayWidth = viewMode === "days" ? colWidth : colWidth / 7;
 	const totalWidth = columns.length * colWidth;
 	const totalHeight = Math.max(layout.totalRows, 1) * ROW_HEIGHT;
 
-	// Get x position for a date
+	// Get x position for a date — left edge of the day's slot. Both
+	// view modes use the same formula now: days from chart start × the
+	// width of a single day.
 	const getX = useCallback(
 		(dateStr: string): number => {
 			const date = parseDate(dateStr);
-			if (viewMode === "days") {
-				const workingDays = getWorkingDays(startDate, date);
-				return Math.max(0, (workingDays.length - 1) * colWidth);
-			}
-			for (let i = 0; i < columns.length; i++) {
-				const weekStart = columns[i];
-				const weekEnd = addDays(weekStart, 6);
-				if (date >= weekStart && date <= weekEnd) {
-					const dayOfWeek = date.getDay();
-					const dayIndex = dayOfWeek === 0 ? 4 : dayOfWeek - 1;
-					return i * colWidth + (dayIndex / 5) * colWidth;
-				}
-			}
-			if (date < columns[0]) return 0;
-			return totalWidth;
+			const d = daysBetween(startDate, date);
+			return Math.max(0, d * dayWidth);
 		},
-		[columns, colWidth, startDate, totalWidth, viewMode],
+		[startDate, dayWidth],
 	);
 
-	/** Inverse of getX: given an x pixel offset, return the closest date string */
+	/** Inverse of getX: given an x pixel offset, return the date at that slot. */
 	const getDateAtX = useCallback(
 		(x: number): string => {
-			const colIndex = Math.max(0, Math.min(Math.round(x / colWidth), columns.length - 1));
-			return formatDate(columns[colIndex]);
+			const d = Math.round(x / dayWidth);
+			const clamped = Math.max(0, d);
+			return formatDate(addDays(startDate, clamped));
 		},
-		[colWidth, columns],
+		[dayWidth, startDate],
 	);
 
+	// Width of a task bar in pixels: number of days the task covers
+	// (inclusive of both endpoints) times one day's width.
 	const getItemWidth = useCallback(
 		(item: { startDate: string; endDate: string }): number => {
-			const x1 = getX(item.startDate);
-			const x2 = getX(item.endDate);
-			return Math.max(colWidth, x2 - x1 + colWidth);
+			const s = parseDate(item.startDate);
+			const e = parseDate(item.endDate);
+			const daysCovered = Math.max(1, daysBetween(s, e) + 1);
+			return daysCovered * dayWidth;
 		},
-		[getX, colWidth],
+		[dayWidth],
 	);
 
 	// --- Task drag state ---
@@ -313,18 +311,15 @@ export default function GanttChart() {
 			const origStart = parseDate(d.originalStartDate);
 			const origEnd = parseDate(d.originalEndDate);
 
-			// Day view columns are *working* days (weekends are not
-			// rendered), so shifting N columns == N working days. Week
-			// view columns are calendar weeks, so N columns == N*7 days.
-			// Using plain addDays in day view makes drags across a
-			// weekend land 2 days short of where the cursor was.
-			const shiftByColumns = (date: Date, n: number): Date =>
-				viewMode === "weeks" ? addDays(date, n * 7) : addWorkingDays(date, n);
+			// Day view: 1 column = 1 calendar day. Week view: 1 column =
+			// 7 calendar days. So shifting by columns is just addDays.
+			const daysPerColumn = viewMode === "weeks" ? 7 : 1;
+			const daysMoved = columnsMoved * daysPerColumn;
 
 			if (d.type === "move") {
-				if (columnsMoved !== 0) {
-					const newStart = shiftByColumns(origStart, columnsMoved);
-					const newEnd = shiftByColumns(origEnd, columnsMoved);
+				if (daysMoved !== 0) {
+					const newStart = addDays(origStart, daysMoved);
+					const newEnd = addDays(origEnd, daysMoved);
 					updateWorkItem(d.itemId, {
 						startDate: formatDate(newStart),
 						endDate: formatDate(newEnd),
@@ -355,8 +350,8 @@ export default function GanttChart() {
 					}
 				}
 			} else if (d.type === "resize-end") {
-				if (columnsMoved !== 0) {
-					const newEnd = shiftByColumns(origEnd, columnsMoved);
+				if (daysMoved !== 0) {
+					const newEnd = addDays(origEnd, daysMoved);
 					if (newEnd >= origStart) {
 						updateWorkItem(d.itemId, {
 							endDate: formatDate(newEnd),
@@ -364,8 +359,8 @@ export default function GanttChart() {
 					}
 				}
 			} else if (d.type === "resize-start") {
-				if (columnsMoved !== 0) {
-					const newStart = shiftByColumns(origStart, columnsMoved);
+				if (daysMoved !== 0) {
+					const newStart = addDays(origStart, daysMoved);
 					if (newStart <= origEnd) {
 						updateWorkItem(d.itemId, {
 							startDate: formatDate(newStart),
@@ -472,16 +467,9 @@ export default function GanttChart() {
 			const wsId = band.workstreamId;
 			const lane = rowIndex - band.startRow;
 
-			// Determine start date. Default duration is 4 working days
-			// (i.e. a 5-day task, Mon-Fri sized). In week view we just
-			// use calendar days since weekends aren't a separate column.
+			// Default duration is 4 calendar days (a 5-day task).
 			const clickDate = getDateAtX(x);
-			const parsedClick = parseDate(clickDate);
-			const endDate = formatDate(
-				viewMode === "weeks"
-					? addDays(parsedClick, 4)
-					: addWorkingDays(parsedClick, 4),
-			);
+			const endDate = formatDate(addDays(parseDate(clickDate), 4));
 
 			addWorkItem(wsId, "New Task", clickDate, endDate, undefined, lane);
 		},
@@ -565,13 +553,18 @@ export default function GanttChart() {
 				>
 					{columns.map((col) => {
 						const isToday = formatDate(col) === formatDate(new Date());
+						const day = col.getDay();
+						const isWeekend =
+							viewMode === "days" && (day === 0 || day === 6);
 						return (
 							<div
 								key={formatDate(col)}
 								className={`flex flex-col items-center justify-center border-r border-border/40 text-[10px] leading-tight ${
 									isToday
 										? "bg-primary/8 font-semibold text-primary"
-										: "text-muted-foreground"
+										: isWeekend
+											? "bg-emerald-500/[0.08] text-emerald-700/70"
+											: "text-muted-foreground"
 								}`}
 								style={{ width: colWidth }}
 							>
@@ -598,6 +591,25 @@ export default function GanttChart() {
 							style={{ height: ROW_HEIGHT }}
 						/>
 					))}
+
+					{/* Weekend column tint — only in day view where each
+					    column is one calendar day, so we can tint the
+					    Sat/Sun columns and let everything align naturally. */}
+					{viewMode === "days" && (
+						<div className="pointer-events-none absolute inset-0">
+							{columns.map((col, i) => {
+								const day = col.getDay();
+								if (day !== 0 && day !== 6) return null;
+								return (
+									<div
+										key={`weekend-${formatDate(col)}`}
+										className="absolute top-0 bottom-0 bg-emerald-500/[0.07]"
+										style={{ left: i * colWidth, width: colWidth }}
+									/>
+								);
+							})}
+						</div>
+					)}
 
 					{/* Workstream divider lines */}
 					{layout.bands.slice(0, -1).map((band) => (
