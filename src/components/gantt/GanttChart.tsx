@@ -30,12 +30,11 @@ export default function GanttChart() {
 		project,
 		viewMode,
 		addWorkItem,
-		updateWorkItem,
-		moveWorkItemToWorkstream,
 		selectedItemId,
 		setSelectedItemId,
 		addDependency,
 		setModalItemId,
+		setProject,
 	} = useGantt();
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const [containerWidth, setContainerWidth] = useState(0);
@@ -308,23 +307,28 @@ export default function GanttChart() {
 
 			const columnsMoved = Math.round(d.offsetX / colWidth);
 			const rowsMoved = Math.round(d.offsetY / ROW_HEIGHT);
+			if (columnsMoved === 0 && rowsMoved === 0) return;
+
+			const item = project.workItems.find((wi) => wi.id === d.itemId);
+			if (!item) return;
+
 			const origStart = parseDate(d.originalStartDate);
 			const origEnd = parseDate(d.originalEndDate);
 
 			// Day view: 1 column = 1 calendar day. Week view: 1 column =
-			// 7 calendar days. So shifting by columns is just addDays.
+			// 7 calendar days.
 			const daysPerColumn = viewMode === "weeks" ? 7 : 1;
 			const daysMoved = columnsMoved * daysPerColumn;
 
+			// Compute the new state for the dragged task.
+			let newStart = origStart;
+			let newEnd = origEnd;
+			let newWsId = item.workstreamId;
+			let newLane: number | undefined;
+
 			if (d.type === "move") {
-				if (daysMoved !== 0) {
-					const newStart = addDays(origStart, daysMoved);
-					const newEnd = addDays(origEnd, daysMoved);
-					updateWorkItem(d.itemId, {
-						startDate: formatDate(newStart),
-						endDate: formatDate(newEnd),
-					});
-				}
+				newStart = addDays(origStart, daysMoved);
+				newEnd = addDays(origEnd, daysMoved);
 				if (rowsMoved !== 0) {
 					const targetRowIndex = d.originalRowIndex + rowsMoved;
 					const targetBand = layout.bands.find(
@@ -332,51 +336,64 @@ export default function GanttChart() {
 							targetRowIndex >= b.startRow &&
 							targetRowIndex < b.startRow + b.span,
 					);
-					const item = project.workItems.find((wi) => wi.id === d.itemId);
-					if (targetBand && item) {
-						const targetLane = targetRowIndex - targetBand.startRow;
-						if (targetBand.workstreamId !== item.workstreamId) {
-							// Cross-workstream drop — move and seat at the
-							// target lane within the new workstream.
-							moveWorkItemToWorkstream(
-								d.itemId,
-								targetBand.workstreamId,
-								targetLane,
-							);
-						} else {
-							// Intra-workstream reorder — just update the lane.
-							updateWorkItem(d.itemId, { lane: targetLane });
-						}
+					if (targetBand) {
+						newWsId = targetBand.workstreamId;
+						newLane = targetRowIndex - targetBand.startRow;
 					}
 				}
 			} else if (d.type === "resize-end") {
-				if (daysMoved !== 0) {
-					const newEnd = addDays(origEnd, daysMoved);
-					if (newEnd >= origStart) {
-						updateWorkItem(d.itemId, {
-							endDate: formatDate(newEnd),
-						});
-					}
-				}
+				newEnd = addDays(origEnd, daysMoved);
+				if (newEnd < origStart) newEnd = origStart;
 			} else if (d.type === "resize-start") {
-				if (daysMoved !== 0) {
-					const newStart = addDays(origStart, daysMoved);
-					if (newStart <= origEnd) {
-						updateWorkItem(d.itemId, {
-							startDate: formatDate(newStart),
-						});
+				newStart = addDays(origStart, daysMoved);
+				if (newStart > origEnd) newStart = origEnd;
+			}
+
+			// If we didn't get an explicit target lane (horizontal-only
+			// move, or a resize), pin the dragged task to its current
+			// lane so the packer can't slide it elsewhere.
+			if (newLane === undefined) {
+				const origBand = layout.bands.find(
+					(b) => b.workstreamId === item.workstreamId,
+				);
+				if (origBand) newLane = d.originalRowIndex - origBand.startRow;
+			}
+
+			// Freeze implicit-lane tasks in every workstream this drag
+			// touches, so the greedy packer doesn't reshuffle them onto
+			// different rows just because this task's dates or lane
+			// changed. Without this, dragging A horizontally past B
+			// would collapse them onto the same lane, "pulling" B up.
+			const affectedWsIds = new Set<string>([item.workstreamId, newWsId]);
+			const nextWorkItems = project.workItems.map((wi) => {
+				if (wi.id === item.id) {
+					return {
+						...wi,
+						workstreamId: newWsId,
+						startDate: formatDate(newStart),
+						endDate: formatDate(newEnd),
+						...(newLane !== undefined ? { lane: newLane } : {}),
+					};
+				}
+				if (affectedWsIds.has(wi.workstreamId) && wi.lane === undefined) {
+					const currentRow = getTaskRowIndex(layout, wi.id);
+					const itemBand = layout.bands.find(
+						(b) => b.workstreamId === wi.workstreamId,
+					);
+					if (itemBand && currentRow >= 0) {
+						return { ...wi, lane: currentRow - itemBand.startRow };
 					}
 				}
-			}
+				return wi;
+			});
+
+			setProject({
+				...project,
+				workItems: nextWorkItems,
+				updatedAt: new Date().toISOString(),
+			});
 		},
-		[
-			colWidth,
-			viewMode,
-			updateWorkItem,
-			moveWorkItemToWorkstream,
-			layout,
-			project.workItems,
-		],
+		[colWidth, viewMode, project, layout, setProject],
 	);
 
 	const handleMouseUp = useCallback(
