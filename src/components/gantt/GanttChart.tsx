@@ -99,7 +99,11 @@ export default function GanttChart() {
 			}
 		}
 
-		return { startDate: start, columns: cols };
+		// Pin the chart origin to columns[0] so every pixel calculation
+		// agrees with what's actually rendered. In week view that's the
+		// Monday of the first week (getWeeks rounds to Monday); in day
+		// view it's the first day.
+		return { startDate: cols[0] ?? start, columns: cols };
 	}, [project.workItems, viewMode, containerWidth]);
 
 	const colWidth = viewMode === "days" ? COL_WIDTH_DAY : COL_WIDTH_WEEK;
@@ -111,38 +115,57 @@ export default function GanttChart() {
 	const totalWidth = columns.length * colWidth;
 	const totalHeight = Math.max(layout.totalRows, 1) * ROW_HEIGHT;
 
-	// Get x position for a date — left edge of the day's slot. Both
-	// view modes use the same formula now: days from chart start × the
-	// width of a single day.
+	// Get x position for a date — the left edge of its slot.
+	// Day view: one slot = one calendar day.
+	// Week view: one slot = one calendar week (the task snaps to the
+	// Monday of the week that contains `date`).
 	const getX = useCallback(
 		(dateStr: string): number => {
 			const date = parseDate(dateStr);
 			const d = daysBetween(startDate, date);
+			if (viewMode === "weeks") {
+				const weekIndex = Math.max(0, Math.floor(d / 7));
+				return weekIndex * colWidth;
+			}
 			return Math.max(0, d * dayWidth);
 		},
-		[startDate, dayWidth],
+		[startDate, dayWidth, colWidth, viewMode],
 	);
 
 	/** Inverse of getX: given an x pixel offset, return the date at that slot. */
 	const getDateAtX = useCallback(
 		(x: number): string => {
-			const d = Math.round(x / dayWidth);
-			const clamped = Math.max(0, d);
-			return formatDate(addDays(startDate, clamped));
+			if (viewMode === "weeks") {
+				const weekIndex = Math.max(0, Math.round(x / colWidth));
+				return formatDate(addDays(startDate, weekIndex * 7));
+			}
+			const d = Math.max(0, Math.round(x / dayWidth));
+			return formatDate(addDays(startDate, d));
 		},
-		[dayWidth, startDate],
+		[dayWidth, colWidth, startDate, viewMode],
 	);
 
-	// Width of a task bar in pixels: number of days the task covers
-	// (inclusive of both endpoints) times one day's width.
+	// Width of a task bar in pixels.
+	// Day view: days covered × dayWidth.
+	// Week view: whole weeks from the start's week to the end's week ×
+	// colWidth, so a task always fills full week columns.
 	const getItemWidth = useCallback(
 		(item: { startDate: string; endDate: string }): number => {
 			const s = parseDate(item.startDate);
 			const e = parseDate(item.endDate);
+			if (viewMode === "weeks") {
+				const startDays = Math.max(0, daysBetween(startDate, s));
+				const endDays = Math.max(0, daysBetween(startDate, e));
+				const weeksCovered = Math.max(
+					1,
+					Math.floor(endDays / 7) - Math.floor(startDays / 7) + 1,
+				);
+				return weeksCovered * colWidth;
+			}
 			const daysCovered = Math.max(1, daysBetween(s, e) + 1);
 			return daysCovered * dayWidth;
 		},
-		[dayWidth],
+		[startDate, dayWidth, colWidth, viewMode],
 	);
 
 	// --- Task drag state ---
@@ -569,7 +592,15 @@ export default function GanttChart() {
 					style={{ height: HEADER_HEIGHT / 2, top: HEADER_HEIGHT / 2 }}
 				>
 					{columns.map((col) => {
-						const isToday = formatDate(col) === formatDate(new Date());
+						// In day view "today" is an exact-date match. In
+						// week view it's whichever week column contains
+						// today — the Monday in columns[i] covers that
+						// Monday through Sunday.
+						const now = new Date();
+						const isToday =
+							viewMode === "days"
+								? formatDate(col) === formatDate(now)
+								: now >= col && now <= addDays(col, 6);
 						const day = col.getDay();
 						const isWeekend =
 							viewMode === "days" && (day === 0 || day === 6);
@@ -655,18 +686,21 @@ export default function GanttChart() {
 						})}
 					</div>
 
-					{/* Today line */}
+					{/* Today line — uses direct day-diff math rather than
+					    getX so the line lands on today's actual position,
+					    not the week column's snapped left edge. */}
 					{(() => {
-						const todayX = getX(formatDate(new Date()));
-						if (todayX >= 0 && todayX <= totalWidth) {
-							return (
-								<div
-									className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-primary/50"
-									style={{ left: todayX + colWidth / 2 }}
-								/>
-							);
-						}
-						return null;
+						const now = new Date();
+						const daysFromStart = daysBetween(startDate, now);
+						if (daysFromStart < 0) return null;
+						const todayX = daysFromStart * dayWidth + dayWidth / 2;
+						if (todayX > totalWidth) return null;
+						return (
+							<div
+								className="pointer-events-none absolute top-0 bottom-0 z-10 w-px bg-primary/50"
+								style={{ left: todayX }}
+							/>
+						);
 					})()}
 
 					{/* Dependency arrows */}
