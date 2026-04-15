@@ -8,6 +8,7 @@ import {
 import { useGantt } from "#/lib/gantt-context";
 import {
 	addDays,
+	addWorkingDays,
 	formatDate,
 	formatDayName,
 	formatMonthYear,
@@ -307,15 +308,23 @@ export default function GanttChart() {
 		(d: NonNullable<typeof dragState>) => {
 			if (!d.didDrag) return;
 
-			const daysMoved = Math.round(d.offsetX / colWidth);
+			const columnsMoved = Math.round(d.offsetX / colWidth);
 			const rowsMoved = Math.round(d.offsetY / ROW_HEIGHT);
 			const origStart = parseDate(d.originalStartDate);
 			const origEnd = parseDate(d.originalEndDate);
 
+			// Day view columns are *working* days (weekends are not
+			// rendered), so shifting N columns == N working days. Week
+			// view columns are calendar weeks, so N columns == N*7 days.
+			// Using plain addDays in day view makes drags across a
+			// weekend land 2 days short of where the cursor was.
+			const shiftByColumns = (date: Date, n: number): Date =>
+				viewMode === "weeks" ? addDays(date, n * 7) : addWorkingDays(date, n);
+
 			if (d.type === "move") {
-				if (daysMoved !== 0) {
-					const newStart = addDays(origStart, daysMoved);
-					const newEnd = addDays(origEnd, daysMoved);
+				if (columnsMoved !== 0) {
+					const newStart = shiftByColumns(origStart, columnsMoved);
+					const newEnd = shiftByColumns(origEnd, columnsMoved);
 					updateWorkItem(d.itemId, {
 						startDate: formatDate(newStart),
 						endDate: formatDate(newEnd),
@@ -346,8 +355,8 @@ export default function GanttChart() {
 					}
 				}
 			} else if (d.type === "resize-end") {
-				if (daysMoved !== 0) {
-					const newEnd = addDays(origEnd, daysMoved);
+				if (columnsMoved !== 0) {
+					const newEnd = shiftByColumns(origEnd, columnsMoved);
 					if (newEnd >= origStart) {
 						updateWorkItem(d.itemId, {
 							endDate: formatDate(newEnd),
@@ -355,8 +364,8 @@ export default function GanttChart() {
 					}
 				}
 			} else if (d.type === "resize-start") {
-				if (daysMoved !== 0) {
-					const newStart = addDays(origStart, daysMoved);
+				if (columnsMoved !== 0) {
+					const newStart = shiftByColumns(origStart, columnsMoved);
 					if (newStart <= origEnd) {
 						updateWorkItem(d.itemId, {
 							startDate: formatDate(newStart),
@@ -367,6 +376,7 @@ export default function GanttChart() {
 		},
 		[
 			colWidth,
+			viewMode,
 			updateWorkItem,
 			moveWorkItemToWorkstream,
 			layout,
@@ -462,9 +472,16 @@ export default function GanttChart() {
 			const wsId = band.workstreamId;
 			const lane = rowIndex - band.startRow;
 
-			// Determine start date
+			// Determine start date. Default duration is 4 working days
+			// (i.e. a 5-day task, Mon-Fri sized). In week view we just
+			// use calendar days since weekends aren't a separate column.
 			const clickDate = getDateAtX(x);
-			const endDate = formatDate(addDays(parseDate(clickDate), 4));
+			const parsedClick = parseDate(clickDate);
+			const endDate = formatDate(
+				viewMode === "weeks"
+					? addDays(parsedClick, 4)
+					: addWorkingDays(parsedClick, 4),
+			);
 
 			addWorkItem(wsId, "New Task", clickDate, endDate, undefined, lane);
 		},
