@@ -176,7 +176,7 @@ export default function GanttSidebar() {
 					return (
 						<div
 							key={ws.id}
-							className={`group absolute left-0 right-0 flex flex-col ${isDragging ? "opacity-40" : ""}`}
+							className={`group absolute left-0 right-0 flex overflow-hidden ${isDragging ? "opacity-40" : ""}`}
 							style={{
 								top,
 								height,
@@ -187,25 +187,59 @@ export default function GanttSidebar() {
 										: undefined,
 							}}
 						>
-							{/* Top bar: grip handle + actions */}
-							<div className="flex items-center gap-0.5 px-1 pt-1">
-								<div
-									data-no-export="true"
-									className="cursor-grab rounded p-0.5 text-white/50 hover:bg-white/20 hover:text-white active:cursor-grabbing"
-									onMouseDown={(e) =>
-										handleGripMouseDown(e, ws.id)
-									}
-									title="Drag to reorder"
-								>
-									<GripVertical className="h-3.5 w-3.5" />
-								</div>
+							{/* Grip handle — narrow left column spanning
+							    the full band height so the label next to
+							    it gets the full vertical space. */}
+							<div
+								data-no-export="true"
+								className="flex w-5 flex-shrink-0 cursor-grab items-center justify-center text-white/60 transition-colors hover:bg-white/15 hover:text-white active:cursor-grabbing"
+								onMouseDown={(e) => handleGripMouseDown(e, ws.id)}
+								title="Drag to reorder"
+							>
+								<GripVertical className="h-3.5 w-3.5" />
+							</div>
 
-								<div className="flex-1" />
+							{/* Label area — click to edit. Fills the whole
+							    band height, so a two-line workstream name
+							    fits even in single-lane bands without the
+							    old "top bar" eating 20px. */}
+							<div
+								className="flex min-w-0 flex-1 cursor-text items-center pr-2"
+								onClick={() => startEdit(ws.id, ws.label)}
+								title={ws.label}
+							>
+								{editingId === ws.id ? (
+									<Input
+										ref={inputRef}
+										value={editValue}
+										onChange={(e) => setEditValue(e.target.value)}
+										onBlur={commitEdit}
+										onClick={(e) => e.stopPropagation()}
+										onKeyDown={(e) => {
+											if (e.key === "Enter") commitEdit();
+											if (e.key === "Escape")
+												setEditingId(null);
+										}}
+										className="h-7 bg-white/90 text-sm text-gray-900"
+									/>
+								) : (
+									<span className="line-clamp-2 select-none font-display text-[13px] font-bold leading-tight tracking-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
+										{ws.label}
+									</span>
+								)}
+							</div>
 
+							{/* Actions — absolute top-right overlay, only
+							    visible on hover so they don't compete
+							    with the label for width. */}
+							<div
+								data-no-export="true"
+								className="pointer-events-none absolute right-1 top-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100"
+							>
 								<button
 									type="button"
-									data-no-export="true"
-									onClick={() => {
+									onClick={(e) => {
+										e.stopPropagation();
 										// Append on a fresh row so the new
 										// task doesn't land on top of one
 										// whose lane was frozen by a drag.
@@ -225,7 +259,7 @@ export default function GanttSidebar() {
 											lane,
 										);
 									}}
-									className="flex items-center gap-0.5 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/30"
+									className="flex items-center gap-0.5 rounded bg-white/25 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-sm hover:bg-white/35"
 									title="Add task"
 								>
 									<Plus className="h-3 w-3" />
@@ -233,40 +267,15 @@ export default function GanttSidebar() {
 								</button>
 								<button
 									type="button"
-									data-no-export="true"
-									onClick={() => handleDelete(ws.id, ws.label)}
-									className="rounded bg-white/20 p-0.5 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500/50"
+									onClick={(e) => {
+										e.stopPropagation();
+										handleDelete(ws.id, ws.label);
+									}}
+									className="rounded bg-white/25 p-0.5 text-white shadow-sm hover:bg-red-500/60"
 									title="Delete workstream"
 								>
 									<Trash2 className="h-3 w-3" />
 								</button>
-							</div>
-
-							{/* Label area — click to edit */}
-							<div
-								className="flex flex-1 cursor-text items-center px-3"
-								onClick={() => startEdit(ws.id, ws.label)}
-								title="Click to rename"
-							>
-								{editingId === ws.id ? (
-									<Input
-										ref={inputRef}
-										value={editValue}
-										onChange={(e) => setEditValue(e.target.value)}
-										onBlur={commitEdit}
-										onClick={(e) => e.stopPropagation()}
-										onKeyDown={(e) => {
-											if (e.key === "Enter") commitEdit();
-											if (e.key === "Escape")
-												setEditingId(null);
-										}}
-										className="h-7 bg-white/90 text-sm text-gray-900"
-									/>
-								) : (
-									<span className="select-none font-display text-[13px] font-bold leading-tight tracking-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
-										{ws.label}
-									</span>
-								)}
 							</div>
 						</div>
 					);
