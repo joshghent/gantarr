@@ -205,7 +205,26 @@ export default function GanttSidebar() {
 								<button
 									type="button"
 									data-no-export="true"
-									onClick={() => addWorkItem(ws.id, "New Task")}
+									onClick={() => {
+										// Append on a fresh row so the new
+										// task doesn't land on top of one
+										// whose lane was frozen by a drag.
+										// Empty workstreams have band.span=1
+										// but zero real tasks, so drop back
+										// to lane 0 in that case.
+										const hasTasks = project.workItems.some(
+											(wi) => wi.workstreamId === ws.id,
+										);
+										const lane = hasTasks ? band.span : 0;
+										addWorkItem(
+											ws.id,
+											"New Task",
+											undefined,
+											undefined,
+											undefined,
+											lane,
+										);
+									}}
 									className="flex items-center gap-0.5 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-medium text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/30"
 									title="Add task"
 								>
