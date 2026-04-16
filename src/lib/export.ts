@@ -33,6 +33,115 @@ function excludeFromExport(node: HTMLElement): boolean {
 	return true;
 }
 
+type StyleSnapshot = { el: HTMLElement; cssText: string };
+
+const CLIP_VALUES = new Set(["auto", "scroll", "hidden"]);
+
+/**
+ * The chart lives inside nested scroll containers (horizontal on the
+ * chart grid, vertical on the sidebar). html-to-image captures whatever
+ * is currently laid out, so anything scrolled off-screen is missing from
+ * the export. Before capture we temporarily promote every clipping
+ * container to overflow:visible, and size the real scrollers to their
+ * full content, so the whole chart lays out on-screen at once. Callers
+ * must invoke `restoreAfterCapture` in a finally block.
+ */
+function expandForCapture(root: HTMLElement): StyleSnapshot[] {
+	const clippers: HTMLElement[] = [];
+	const consider = (el: Element) => {
+		if (!(el instanceof HTMLElement)) return;
+		const cs = getComputedStyle(el);
+		if (
+			CLIP_VALUES.has(cs.overflow) ||
+			CLIP_VALUES.has(cs.overflowX) ||
+			CLIP_VALUES.has(cs.overflowY)
+		) {
+			clippers.push(el);
+		}
+	};
+	consider(root);
+	root.querySelectorAll("*").forEach(consider);
+
+	const snapshots: StyleSnapshot[] = clippers.map((el) => ({
+		el,
+		cssText: el.style.cssText,
+	}));
+
+	// Measure scroll sizes BEFORE mutating — once we set overflow:visible
+	// the browser recomputes scrollWidth/Height based on new layout, which
+	// may no longer reflect the scroll extent we care about.
+	const scrollSizes = new Map<HTMLElement, { w: number; h: number }>();
+	for (const el of clippers) {
+		const cs = getComputedStyle(el);
+		const isScroller =
+			cs.overflow === "auto" ||
+			cs.overflow === "scroll" ||
+			cs.overflowX === "auto" ||
+			cs.overflowX === "scroll" ||
+			cs.overflowY === "auto" ||
+			cs.overflowY === "scroll";
+		if (isScroller) {
+			scrollSizes.set(el, { w: el.scrollWidth, h: el.scrollHeight });
+		}
+	}
+
+	for (const el of clippers) {
+		el.style.overflow = "visible";
+		el.style.overflowX = "visible";
+		el.style.overflowY = "visible";
+		el.style.maxWidth = "none";
+		el.style.maxHeight = "none";
+		const size = scrollSizes.get(el);
+		if (size) {
+			// Scroller: pin to measured content size so nothing is clipped.
+			el.style.flex = "none";
+			el.style.width = `${size.w}px`;
+			el.style.height = `${size.h}px`;
+		} else if (getComputedStyle(el).position !== "absolute") {
+			// Non-scroller clipper (overflow:hidden wrapper): drop flex
+			// sizing so it grows around the now-expanded children instead
+			// of holding them to the original viewport dimensions. Skip
+			// absolutely positioned bands — their size comes from left/
+			// right/top/bottom and clearing flex would break them.
+			el.style.flex = "none";
+		}
+	}
+
+	// Force the root to size around its (now expanded) content so
+	// html-to-image reads the full dimensions from offsetWidth/Height.
+	root.style.width = `${root.scrollWidth}px`;
+	root.style.height = `${root.scrollHeight}px`;
+
+	return snapshots;
+}
+
+function restoreAfterCapture(snapshots: StyleSnapshot[]) {
+	for (const { el, cssText } of snapshots) {
+		el.style.cssText = cssText;
+	}
+}
+
+async function captureFullChart(element: HTMLElement): Promise<string> {
+	const snapshots = expandForCapture(element);
+	try {
+		// One frame for the browser to flush layout changes before we
+		// serialize the tree.
+		await new Promise<void>((resolve) => {
+			requestAnimationFrame(() => resolve());
+		});
+		return await toPng(element, {
+			backgroundColor: "#ffffff",
+			pixelRatio: 2,
+			skipFonts: true,
+			filter: excludeFromExport,
+			width: element.offsetWidth,
+			height: element.offsetHeight,
+		});
+	} finally {
+		restoreAfterCapture(snapshots);
+	}
+}
+
 export function downloadJson(project: GanttProject) {
 	const data = JSON.stringify(project, null, 2);
 	const blob = new Blob([data], { type: "application/json" });
@@ -61,12 +170,7 @@ export function loadJson(file: File): Promise<GanttProject> {
 }
 
 export async function exportPng(element: HTMLElement, projectName: string) {
-	const dataUrl = await toPng(element, {
-		backgroundColor: "#ffffff",
-		pixelRatio: 2,
-		skipFonts: true,
-		filter: excludeFromExport,
-	});
+	const dataUrl = await captureFullChart(element);
 	const a = document.createElement("a");
 	a.href = dataUrl;
 	a.download = `${sanitizeFilename(projectName)}.png`;
@@ -74,12 +178,7 @@ export async function exportPng(element: HTMLElement, projectName: string) {
 }
 
 export async function exportPdf(element: HTMLElement, projectName: string) {
-	const dataUrl = await toPng(element, {
-		backgroundColor: "#ffffff",
-		pixelRatio: 2,
-		skipFonts: true,
-		filter: excludeFromExport,
-	});
+	const dataUrl = await captureFullChart(element);
 
 	const img = new Image();
 	img.src = dataUrl;
