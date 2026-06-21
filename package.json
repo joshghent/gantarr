@@ -68,12 +68,24 @@
     "typescript": "^5.7.2",
     "vite": "^7.3.1",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^3.0.5"
+    "vitest": "~4.1.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
       "lightningcss"
     ]
+  },
+  "overrides": {
+    "dompurify": "~3.4.11",
+    "undici": "~8.5.0",
+    "hono": "~4.12.25",
+    "launch-editor": "~2.14.1",
+    "esbuild": "~0.28.1",
+    "shell-quote": "~1.8.4",
+    "qs": "~6.15.2",
+    "ws": "~8.20.1",
+    "fast-uri": "~3.1.2",
+    "ip-address": "~10.1.1"
   }
 }
