@@ -1,21 +1,20 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-	parseDate,
-	formatDate,
-	isWeekday,
 	addDays,
-	getWorkingDays,
-	getDays,
-	daysBetween,
-	toWorkingDay,
 	addWorkingDays,
-	workingDaysBetween,
+	daysBetween,
+	formatDate,
+	formatDayName,
+	formatMonthYear,
+	formatShortDate,
+	getDays,
 	getMonday,
 	getWeeks,
-	formatShortDate,
-	formatMonthYear,
-	formatDayName,
-	today,
+	getWorkingDays,
+	isWeekday,
+	parseDate,
+	toWorkingDay,
+	workingDaysBetween,
 } from "./dates";
 
 describe("parseDate", () => {
@@ -350,7 +349,20 @@ describe("formatShortDate", () => {
 	});
 
 	it("should handle all months", () => {
-		const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+		const months = [
+			"Jan",
+			"Feb",
+			"Mar",
+			"Apr",
+			"May",
+			"Jun",
+			"Jul",
+			"Aug",
+			"Sep",
+			"Oct",
+			"Nov",
+			"Dec",
+		];
 		months.forEach((month, index) => {
 			const date = new Date(2024, index, 15);
 			expect(formatShortDate(date)).toBe(`15 ${month}`);
@@ -365,7 +377,20 @@ describe("formatMonthYear", () => {
 	});
 
 	it("should handle all months", () => {
-		const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+		const months = [
+			"Jan",
+			"Feb",
+			"Mar",
+			"Apr",
+			"May",
+			"Jun",
+			"Jul",
+			"Aug",
+			"Sep",
+			"Oct",
+			"Nov",
+			"Dec",
+		];
 		months.forEach((month, index) => {
 			const date = new Date(2024, index, 15);
 			expect(formatMonthYear(date)).toBe(`${month} 2024`);
@@ -384,4 +409,17 @@ describe("formatDayName", () => {
 		expect(formatDayName(sunday)).toBe("Sun");
 
 		const monday = new Date(2024, 2, 18);
-		expect
+		expect(formatDayName(monday)).toBe("Mon");
+
+		const saturday = new Date(2024, 2, 16);
+		expect(formatDayName(saturday)).toBe("Sat");
+	});
+
+	it("should return all seven day names in order", () => {
+		// 2024-03-17 is a Sunday; walk the week.
+		const names = Array.from({ length: 7 }, (_, i) =>
+			formatDayName(new Date(2024, 2, 17 + i)),
+		);
+		expect(names).toEqual(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
+	});
+});
