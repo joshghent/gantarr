@@ -14,6 +14,10 @@ import { Input } from "#/components/ui/input";
 import { downloadJson, exportPdf, exportPng, loadJson } from "#/lib/export";
 import { useGantt } from "#/lib/gantt-context";
 
+// Injected at build time by Vite's `define` (see vite.config.ts). Declared
+// here because tsc's include globs don't pick up the ambient in env.d.ts.
+declare const __BUILD_TIME__: string;
+
 // Prefer "⌘" on macOS so the tooltips feel native. Server-rendered
 // strings can't touch window so fall back to "Ctrl" there.
 const MOD_KEY =
