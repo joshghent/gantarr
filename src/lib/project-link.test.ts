@@ -32,6 +32,18 @@ describe("encodeProject / decodeProject", () => {
 		expect(back).toEqual(project);
 	});
 
+	it("decodes a token gzipped by a different implementation (interop)", async () => {
+		// Produced by Node's zlib.gzipSync (a separate gzip implementation from
+		// our fflate encoder) for a minimal valid project. Guards that decode
+		// accepts standard gzip from any source — e.g. a previously-shared link
+		// or a token built by another runtime.
+		const FIXTURE =
+			"H4sIAAAAAAAAE4WOTUsDQRBE_0t5nZWePSQ6N0GFnA0ISg7jditDJrNLby-JhPx3GRfjx0XoQ1NUPd4RiREweDiUuBME3KeDTSpw2Pe6HU0l7kaE5-Nc3ddqji-SEfD4AIdeWRSBHLo-94qAizZe89UrTpsZsjL5iUj-F3x1xlqyXBXWcdzCYbSodhutRi21i4aWDS3gIIX_xJ6qlbxJ4bti-l6ZZcr52666sAxSWEqXpOpsvibz36lEE76xM9c35NdE4fMuiegJDtPA_9dOH8nAIGFZAQAA";
+		const project = await decodeProject(FIXTURE);
+		expect(project.name).toBe("Fixture");
+		expect(project.workItems[0].title).toBe("Task");
+	});
+
 	it("produces a URL-safe token (no +, /, = or whitespace)", async () => {
 		const token = await encodeProject(sample());
 		expect(token).toMatch(/^[A-Za-z0-9_-]+$/);
