@@ -1,8 +1,3 @@
-import { useEffect, useRef, useState } from "react";
-import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
-import { useGantt } from "#/lib/gantt-context";
-import { downloadJson, exportPdf, exportPng, loadJson } from "#/lib/export";
 import {
 	Download,
 	FileDown,
@@ -11,7 +6,13 @@ import {
 	HelpCircle,
 	Image,
 	Plus,
+	Sparkles,
 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
+import { downloadJson, exportPdf, exportPng, loadJson } from "#/lib/export";
+import { useGantt } from "#/lib/gantt-context";
 
 // Prefer "⌘" on macOS so the tooltips feel native. Server-rendered
 // strings can't touch window so fall back to "Ctrl" there.
@@ -23,9 +24,11 @@ const MOD_KEY =
 export default function GanttToolbar({
 	chartRef,
 	onOpenHelp,
+	onOpenWhatsNew,
 }: {
 	chartRef: React.RefObject<HTMLDivElement | null>;
 	onOpenHelp: () => void;
+	onOpenWhatsNew: () => void;
 }) {
 	const {
 		project,
@@ -224,6 +227,15 @@ export default function GanttToolbar({
 				</Button>
 
 				<div className="mx-0.5 h-5 w-px bg-border/60" />
+
+				<button
+					type="button"
+					onClick={onOpenWhatsNew}
+					className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					title="What's new"
+				>
+					<Sparkles className="h-3.5 w-3.5" />
+				</button>
 
 				<button
 					type="button"

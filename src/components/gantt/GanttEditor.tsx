@@ -1,14 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GanttProvider, useGantt } from "#/lib/gantt-context";
 import { downloadJson, loadJson } from "#/lib/export";
+import { GanttProvider, useGantt } from "#/lib/gantt-context";
 import { createProject } from "#/lib/gantt-store";
-import GanttToolbar from "./GanttToolbar";
-import GanttSidebar from "./GanttSidebar";
+import {
+	hasUnseenRelease,
+	LATEST_RELEASE_VERSION,
+	RELEASE_SEEN_KEY,
+} from "#/lib/release-notes";
+import { useImportFromUrl } from "#/lib/use-import-from-url";
 import GanttChart from "./GanttChart";
+import GanttSidebar from "./GanttSidebar";
+import GanttToolbar from "./GanttToolbar";
+import HelpDialog from "./HelpDialog";
 import ItemDetailPanel from "./ItemDetailPanel";
 import LegendPanel from "./LegendPanel";
+import ReleaseNotesDialog from "./ReleaseNotesDialog";
 import TaskModal from "./TaskModal";
-import HelpDialog from "./HelpDialog";
 
 function GanttEditorInner() {
 	const chartRef = useRef<HTMLDivElement>(null);
@@ -28,6 +35,51 @@ function GanttEditorInner() {
 
 	const [helpOpen, setHelpOpen] = useState(false);
 	const [dragOverActive, setDragOverActive] = useState(false);
+	const [releaseOpen, setReleaseOpen] = useState(false);
+
+	// --- Open a chart shared via ?import= (e.g. produced by an AI) ---
+	const importStatus = useImportFromUrl(
+		useCallback(
+			(imported) => {
+				setProject(imported);
+				markClean();
+			},
+			[setProject, markClean],
+		),
+	);
+	useEffect(() => {
+		if (importStatus.state === "error") {
+			alert(`Couldn't open that shared chart: ${importStatus.message}`);
+		}
+	}, [importStatus]);
+
+	// --- One-time "What's new" popup, gated by last-seen version ---
+	const markReleaseSeen = useCallback(() => {
+		try {
+			window.localStorage.setItem(RELEASE_SEEN_KEY, LATEST_RELEASE_VERSION);
+		} catch {
+			// localStorage may be unavailable (private mode); the dialog still
+			// works, it just can't remember being dismissed.
+		}
+	}, []);
+
+	useEffect(() => {
+		let lastSeen: string | null = null;
+		try {
+			lastSeen = window.localStorage.getItem(RELEASE_SEEN_KEY);
+		} catch {
+			lastSeen = null;
+		}
+		if (hasUnseenRelease(lastSeen)) setReleaseOpen(true);
+	}, []);
+
+	const handleReleaseOpenChange = useCallback(
+		(open: boolean) => {
+			setReleaseOpen(open);
+			if (!open) markReleaseSeen();
+		},
+		[markReleaseSeen],
+	);
 
 	// --- File loading (used by Cmd+O shortcut and drop handler) ---
 	const runLoad = useCallback(
@@ -37,7 +89,9 @@ function GanttEditorInner() {
 				setProject(loaded);
 				markClean();
 			} catch (_err) {
-				alert("Failed to load file. Make sure it's a valid .gantarr.json file.");
+				alert(
+					"Failed to load file. Make sure it's a valid .gantarr.json file.",
+				);
 			}
 		},
 		[setProject, markClean],
@@ -201,7 +255,11 @@ function GanttEditorInner() {
 
 	return (
 		<div className="flex h-screen flex-col">
-			<GanttToolbar chartRef={chartRef} onOpenHelp={() => setHelpOpen(true)} />
+			<GanttToolbar
+				chartRef={chartRef}
+				onOpenHelp={() => setHelpOpen(true)}
+				onOpenWhatsNew={() => setReleaseOpen(true)}
+			/>
 			<div className="relative flex flex-1 overflow-hidden">
 				<div ref={chartRef} className="flex flex-1 overflow-hidden">
 					<GanttSidebar />
@@ -229,6 +287,10 @@ function GanttEditorInner() {
 			</div>
 			<TaskModal />
 			<HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+			<ReleaseNotesDialog
+				open={releaseOpen}
+				onOpenChange={handleReleaseOpenChange}
+			/>
 		</div>
 	);
 }

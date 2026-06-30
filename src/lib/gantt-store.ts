@@ -9,7 +9,7 @@ import type {
 import { formatDate, today } from "./dates";
 
 // Palette used to assign colors to new workstreams (cycles through)
-const WORKSTREAM_PALETTE = [
+export const WORKSTREAM_PALETTE = [
 	"#e76f51", // red-orange
 	"#f4a261", // orange
 	"#e9c46a", // yellow
@@ -20,7 +20,7 @@ const WORKSTREAM_PALETTE = [
 	"#f472b6", // pink
 ];
 
-const DEFAULT_LEGEND = [
+export const DEFAULT_LEGEND = [
 	{ label: "Development", color: "#3b82f6" },
 	{ label: "Design", color: "#8b5cf6" },
 	{ label: "Marketing", color: "#f97316" },
@@ -150,9 +150,7 @@ export function addWorkItem(
 	const start = startDate || today();
 	const end =
 		endDate ||
-		formatDate(
-			new Date(new Date(start).getTime() + 4 * 24 * 60 * 60 * 1000),
-		);
+		formatDate(new Date(new Date(start).getTime() + 4 * 24 * 60 * 60 * 1000));
 
 	// Compute next order for this workstream
 	const existingInWs = project.workItems.filter(
