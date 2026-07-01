@@ -45,8 +45,13 @@ function WorkItemBarInner({
 	onDoubleClick,
 	onConnectorDragStart,
 }: WorkItemBarProps) {
-	const { project, editingItemId, setEditingItemId, updateWorkItem, setModalItemId } =
-		useGantt();
+	const {
+		project,
+		editingItemId,
+		setEditingItemId,
+		updateWorkItem,
+		setModalItemId,
+	} = useGantt();
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [titleDraft, setTitleDraft] = useState(item.title);
 
@@ -98,6 +103,7 @@ function WorkItemBarInner({
 	return (
 		<div
 			data-workitem={item.id}
+			data-export-clip="wrap"
 			className={`group absolute flex items-center rounded-lg border text-xs font-medium transition-shadow select-none ${
 				isSelected
 					? "ring-2 ring-primary/70 ring-offset-1 z-10 shadow-sm"
@@ -156,7 +162,10 @@ function WorkItemBarInner({
 					style={{ color: getContrastText(color) }}
 				/>
 			) : (
-				<span className="min-w-0 flex-1 truncate whitespace-nowrap px-3">
+				<span
+					data-export-clip="wrap"
+					className="min-w-0 flex-1 truncate whitespace-nowrap px-3"
+				>
 					{item.title}
 				</span>
 			)}

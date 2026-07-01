@@ -1,7 +1,26 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useGantt } from "#/lib/gantt-context";
 import type { GanttLayout } from "#/lib/gantt-layout";
 import { getTaskRowIndex } from "#/lib/gantt-layout";
+
+/**
+ * Build the arrow path from a task's right edge to a successor's left edge.
+ * A single cubic Bézier handles every case: for forward dependencies the
+ * control points stretch with the horizontal gap; for adjacent or backward
+ * ones (a task that ends where the next begins) we keep a small fixed reach
+ * so the curve makes a tidy S instead of the sharp orthogonal spikes the
+ * old elbow routing produced.
+ */
+export function arrowPath(
+	fromX: number,
+	fromY: number,
+	toX: number,
+	toY: number,
+): string {
+	const dx = toX - fromX;
+	const reach = dx > 24 ? Math.min(Math.max(dx * 0.4, 24), 80) : 22;
+	return `M ${fromX} ${fromY} C ${fromX + reach} ${fromY}, ${toX - reach} ${toY}, ${toX} ${toY}`;
+}
 
 interface DependencyArrowsProps {
 	getX: (dateStr: string) => number;
@@ -16,7 +35,8 @@ export default function DependencyArrows({
 	rowHeight,
 	layout,
 }: DependencyArrowsProps) {
-	const { project } = useGantt();
+	const { project, deleteDependency } = useGantt();
+	const [hoveredId, setHoveredId] = useState<string | null>(null);
 
 	const arrows = useMemo(() => {
 		return project.dependencies
@@ -46,7 +66,14 @@ export default function DependencyArrows({
 			toX: number;
 			toY: number;
 		}[];
-	}, [project.dependencies, project.workItems, layout, getX, getItemWidth, rowHeight]);
+	}, [
+		project.dependencies,
+		project.workItems,
+		layout,
+		getX,
+		getItemWidth,
+		rowHeight,
+	]);
 
 	if (arrows.length === 0) return null;
 
@@ -69,37 +96,47 @@ export default function DependencyArrows({
 				>
 					<polygon points="0 0, 8 3, 0 6" fill="#5a7a80" />
 				</marker>
+				<marker
+					id="arrowhead-hover"
+					markerWidth="8"
+					markerHeight="6"
+					refX="8"
+					refY="3"
+					orient="auto"
+				>
+					<polygon points="0 0, 8 3, 0 6" fill="#ef4444" />
+				</marker>
 			</defs>
 			{arrows.map((arrow) => {
-				const dx = arrow.toX - arrow.fromX;
-				const bendOut = Math.max(20, Math.min(Math.abs(dx) * 0.3, 60));
-
-				let path: string;
-				if (dx > 30) {
-					path = `M ${arrow.fromX} ${arrow.fromY}
-						C ${arrow.fromX + bendOut} ${arrow.fromY},
-						  ${arrow.toX - bendOut} ${arrow.toY},
-						  ${arrow.toX} ${arrow.toY}`;
-				} else {
-					const offsetY = arrow.fromY < arrow.toY ? -20 : 20;
-					path = `M ${arrow.fromX} ${arrow.fromY}
-						L ${arrow.fromX + 15} ${arrow.fromY}
-						Q ${arrow.fromX + 25} ${arrow.fromY}, ${arrow.fromX + 25} ${arrow.fromY + offsetY}
-						L ${arrow.fromX + 25} ${(arrow.fromY + arrow.toY) / 2}
-						Q ${arrow.fromX + 25} ${arrow.toY - offsetY}, ${arrow.toX - 15} ${arrow.toY}
-						L ${arrow.toX} ${arrow.toY}`;
-				}
+				const path = arrowPath(arrow.fromX, arrow.fromY, arrow.toX, arrow.toY);
+				const isHovered = hoveredId === arrow.id;
 
 				return (
-					<path
+					<g
 						key={arrow.id}
-						d={path}
-						stroke="#5a7a80"
-						strokeWidth={1.5}
-						fill="none"
-						markerEnd="url(#arrowhead)"
-						opacity={0.7}
-					/>
+						className="pointer-events-auto cursor-pointer"
+						onMouseEnter={() => setHoveredId(arrow.id)}
+						onMouseLeave={() =>
+							setHoveredId((id) => (id === arrow.id ? null : id))
+						}
+						onClick={(e) => {
+							e.stopPropagation();
+							deleteDependency(arrow.id);
+						}}
+					>
+						{/* Wide invisible hit target so the thin arrow is easy
+						    to hover and click. */}
+						<path d={path} stroke="transparent" strokeWidth={12} fill="none" />
+						<path
+							d={path}
+							stroke={isHovered ? "#ef4444" : "#5a7a80"}
+							strokeWidth={isHovered ? 2.5 : 1.5}
+							fill="none"
+							markerEnd={`url(#arrowhead${isHovered ? "-hover" : ""})`}
+							opacity={isHovered ? 1 : 0.7}
+						/>
+						{isHovered && <title>Click to remove dependency</title>}
+					</g>
 				);
 			})}
 		</svg>

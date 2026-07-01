@@ -26,8 +26,8 @@ describe("RELEASE_NOTES", () => {
 		expect(LATEST_RELEASE_VERSION).toBe(RELEASE_NOTES[0].version);
 	});
 
-	it("announces the AI integration in the latest release", () => {
-		const blob = JSON.stringify(RELEASE_NOTES[0]).toLowerCase();
+	it("still announces the AI integration somewhere in the list", () => {
+		const blob = JSON.stringify(RELEASE_NOTES).toLowerCase();
 		expect(blob.includes("ai") || blob.includes("mcp")).toBe(true);
 	});
 });

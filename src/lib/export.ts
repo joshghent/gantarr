@@ -46,10 +46,37 @@ const CLIP_VALUES = new Set(["auto", "scroll", "hidden"]);
  * full content, so the whole chart lays out on-screen at once. Callers
  * must invoke `restoreAfterCapture` in a finally block.
  */
-function expandForCapture(root: HTMLElement): StyleSnapshot[] {
+export function expandForCapture(root: HTMLElement): StyleSnapshot[] {
+	// Text elements opt out of the overflow-visible treatment: instead of
+	// spilling their content across the chart, they keep clipping so labels
+	// stay inside their box. `wrap` lets multi-line labels (task bars,
+	// workstream names) flow onto extra lines; `nowrap` keeps single-line
+	// labels (month/week headers) on one line and ellipsizes the overflow.
+	const wrappers = Array.from(
+		root.querySelectorAll<HTMLElement>("[data-export-clip]"),
+	);
+	const wrapperSet = new Set(wrappers);
+	const wrapperSnapshots: StyleSnapshot[] = wrappers.map((el) => ({
+		el,
+		cssText: el.style.cssText,
+	}));
+	for (const el of wrappers) {
+		el.style.overflow = "hidden";
+		if (el.dataset.exportClip === "wrap") {
+			el.style.whiteSpace = "normal";
+			el.style.wordBreak = "break-word";
+			el.style.textOverflow = "clip";
+		} else {
+			el.style.whiteSpace = "nowrap";
+			el.style.textOverflow = "ellipsis";
+		}
+	}
+
 	const clippers: HTMLElement[] = [];
 	const consider = (el: Element) => {
 		if (!(el instanceof HTMLElement)) return;
+		// Marked text elements are handled above — never expand them.
+		if (wrapperSet.has(el)) return;
 		const cs = getComputedStyle(el);
 		if (
 			CLIP_VALUES.has(cs.overflow) ||
@@ -62,10 +89,12 @@ function expandForCapture(root: HTMLElement): StyleSnapshot[] {
 	consider(root);
 	root.querySelectorAll("*").forEach(consider);
 
-	const snapshots: StyleSnapshot[] = clippers.map((el) => ({
-		el,
-		cssText: el.style.cssText,
-	}));
+	const snapshots: StyleSnapshot[] = wrapperSnapshots.concat(
+		clippers.map((el) => ({
+			el,
+			cssText: el.style.cssText,
+		})),
+	);
 
 	// Measure scroll sizes BEFORE mutating — once we set overflow:visible
 	// the browser recomputes scrollWidth/Height based on new layout, which
@@ -115,7 +144,7 @@ function expandForCapture(root: HTMLElement): StyleSnapshot[] {
 	return snapshots;
 }
 
-function restoreAfterCapture(snapshots: StyleSnapshot[]) {
+export function restoreAfterCapture(snapshots: StyleSnapshot[]) {
 	for (const { el, cssText } of snapshots) {
 		el.style.cssText = cssText;
 	}

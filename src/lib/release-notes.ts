@@ -12,6 +12,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
 	{
+		version: "2026.07.01-polish",
+		date: "2026-07-01",
+		title: "Cleaner exports & tidier arrows",
+		items: [
+			"PNG/PDF exports now wrap long task and workstream names instead of spilling them across the chart, and month labels stay inside their columns.",
+			"Dependency arrows between back-to-back tasks are smooth again — no more spiky elbows.",
+			"Click any dependency arrow to remove it.",
+			"New tasks added from the sidebar now land where you're looking, not always on today.",
+		],
+	},
+	{
 		version: "2026.06.22-ai",
 		date: "2026-06-22",
 		title: "Build charts with AI",

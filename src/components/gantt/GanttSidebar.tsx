@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { GripVertical, Plus, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Input } from "#/components/ui/input";
 import { useGantt } from "#/lib/gantt-context";
 import { buildLayout } from "#/lib/gantt-layout";
-import { GripVertical, Plus, Trash2 } from "lucide-react";
 
 const ROW_HEIGHT = 44;
 const HEADER_HEIGHT = 48;
@@ -15,6 +15,7 @@ export default function GanttSidebar() {
 		deleteWorkstream,
 		addWorkItem,
 		setProject,
+		viewportDateRef,
 	} = useGantt();
 
 	const [editingId, setEditingId] = useState<string | null>(null);
@@ -217,13 +218,15 @@ export default function GanttSidebar() {
 										onClick={(e) => e.stopPropagation()}
 										onKeyDown={(e) => {
 											if (e.key === "Enter") commitEdit();
-											if (e.key === "Escape")
-												setEditingId(null);
+											if (e.key === "Escape") setEditingId(null);
 										}}
 										className="h-7 bg-white/90 text-sm text-gray-900"
 									/>
 								) : (
-									<span className="line-clamp-2 select-none font-display text-[13px] font-bold leading-tight tracking-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
+									<span
+										data-export-clip="wrap"
+										className="line-clamp-2 select-none font-display text-[13px] font-bold leading-tight tracking-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+									>
 										{ws.label}
 									</span>
 								)}
@@ -250,10 +253,14 @@ export default function GanttSidebar() {
 											(wi) => wi.workstreamId === ws.id,
 										);
 										const lane = hasTasks ? band.span : 0;
+										// Start the task near the left of the
+										// current viewport so it lands where
+										// the user is looking, not at today.
+										const start = viewportDateRef.current ?? undefined;
 										addWorkItem(
 											ws.id,
 											"New Task",
-											undefined,
+											start,
 											undefined,
 											undefined,
 											lane,

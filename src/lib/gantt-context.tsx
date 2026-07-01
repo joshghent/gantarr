@@ -1,10 +1,12 @@
 import {
 	createContext,
+	type MutableRefObject,
+	type ReactNode,
 	useCallback,
 	useContext,
 	useEffect,
+	useRef,
 	useState,
-	type ReactNode,
 } from "react";
 import type {
 	GanttProject,
@@ -71,6 +73,12 @@ interface GanttContextValue {
 	setEditingItemId: (id: string | null) => void;
 	modalItemId: string | null;
 	setModalItemId: (id: string | null) => void;
+
+	// Leftmost date currently visible in the chart viewport. Kept in a ref
+	// (updated on scroll by GanttChart) so reading it doesn't force a
+	// re-render on every scroll frame. Used to place new tasks near where
+	// the user is looking rather than always at today.
+	viewportDateRef: MutableRefObject<string | null>;
 }
 
 const GanttContext = createContext<GanttContextValue | null>(null);
@@ -88,6 +96,7 @@ export function GanttProvider({
 	const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
 	const [editingItemId, setEditingItemId] = useState<string | null>(null);
 	const [modalItemId, setModalItemId] = useState<string | null>(null);
+	const viewportDateRef = useRef<string | null>(null);
 
 	// Dirty tracking — the default project that ships on first load stays
 	// "clean" because we never call any mutator on it. Only explicit user
@@ -96,13 +105,10 @@ export function GanttProvider({
 
 	// Internal helper: every store mutation routes through here so we
 	// don't have to remember to flip isDirty in every callback.
-	const mutate = useCallback(
-		(updater: (p: GanttProject) => GanttProject) => {
-			setProjectState(updater);
-			setIsDirty(true);
-		},
-		[],
-	);
+	const mutate = useCallback((updater: (p: GanttProject) => GanttProject) => {
+		setProjectState(updater);
+		setIsDirty(true);
+	}, []);
 
 	// Whole-project replacement used for mutations that aren't a simple
 	// single-field edit (e.g. drag-to-reorder in the sidebar, rename in
@@ -267,6 +273,7 @@ export function GanttProvider({
 				setEditingItemId,
 				modalItemId,
 				setModalItemId,
+				viewportDateRef,
 			}}
 		>
 			{children}

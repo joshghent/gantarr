@@ -212,7 +212,8 @@ export default function ItemDetailPanel() {
 						})}
 					</div>
 					<p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-						Drag the dot on a task&apos;s edge to link tasks
+						Drag the dot on a task&apos;s edge to link tasks. Click an
+						arrow to remove it.
 					</p>
 				</div>
 

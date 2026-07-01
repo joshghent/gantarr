@@ -9,9 +9,11 @@ import {
 } from "vitest";
 import {
 	downloadJson,
+	expandForCapture,
 	exportPdf,
 	exportPng,
 	loadJson,
+	restoreAfterCapture,
 	sanitizeFilename,
 } from "./export";
 import { createProject } from "./gantt-store";
@@ -314,5 +316,51 @@ describe("exportPdf", () => {
 		await exportPdf(mockElement, "My<Project>:Name");
 
 		expect(mockPdf.save).toHaveBeenCalledWith("myprojectname.pdf");
+	});
+});
+
+describe("expandForCapture — text elements", () => {
+	it("makes wrap-marked labels wrap-and-clip instead of spilling", () => {
+		const root = document.createElement("div");
+		const label = document.createElement("span");
+		// Simulate the on-screen truncation the tailwind `truncate` class
+		// gives task/workstream labels.
+		label.dataset.exportClip = "wrap";
+		label.style.overflow = "hidden";
+		label.style.whiteSpace = "nowrap";
+		label.style.textOverflow = "ellipsis";
+		root.appendChild(label);
+
+		const snapshots = expandForCapture(root);
+		try {
+			// Must NOT be promoted to overflow:visible (that's what let text
+			// spill across the chart on export).
+			expect(label.style.overflow).toBe("hidden");
+			expect(label.style.whiteSpace).toBe("normal");
+			expect(label.style.wordBreak).toBe("break-word");
+		} finally {
+			restoreAfterCapture(snapshots);
+		}
+
+		// Original inline styles are restored afterwards.
+		expect(label.style.whiteSpace).toBe("nowrap");
+		expect(label.style.overflow).toBe("hidden");
+	});
+
+	it("keeps nowrap-marked headers on one line with an ellipsis", () => {
+		const root = document.createElement("div");
+		const month = document.createElement("span");
+		month.dataset.exportClip = "nowrap";
+		month.style.overflow = "hidden";
+		root.appendChild(month);
+
+		const snapshots = expandForCapture(root);
+		try {
+			expect(month.style.overflow).toBe("hidden");
+			expect(month.style.whiteSpace).toBe("nowrap");
+			expect(month.style.textOverflow).toBe("ellipsis");
+		} finally {
+			restoreAfterCapture(snapshots);
+		}
 	});
 });

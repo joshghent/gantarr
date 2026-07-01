@@ -44,6 +44,7 @@ const TIPS: string[] = [
 	"Double-click an empty row to create a new task where you clicked.",
 	"Drag a task to move, drag its edges to resize.",
 	"Drag the dot on a task's right edge to draw a dependency arrow.",
+	"Click a dependency arrow to remove it.",
 	"Click the project name in the toolbar to rename it.",
 	"Drop a .gantarr.json file anywhere on the page to load it.",
 ];

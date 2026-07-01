@@ -1,11 +1,4 @@
-import {
-	useCallback,
-	useLayoutEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
-import { useGantt } from "#/lib/gantt-context";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
 	addDays,
 	daysBetween,
@@ -17,10 +10,11 @@ import {
 	getWeeks,
 	parseDate,
 } from "#/lib/dates";
+import { useGantt } from "#/lib/gantt-context";
 import { buildLayout, getTaskRowIndex } from "#/lib/gantt-layout";
-import { ROW_HEIGHT, HEADER_HEIGHT } from "./GanttSidebar";
-import WorkItemBar from "./WorkItemBar";
 import DependencyArrows from "./DependencyArrows";
+import { HEADER_HEIGHT, ROW_HEIGHT } from "./GanttSidebar";
+import WorkItemBar from "./WorkItemBar";
 
 const COL_WIDTH_DAY = 36;
 const COL_WIDTH_WEEK = 112; // 16px per day × 7 — keeps the math clean
@@ -35,6 +29,7 @@ export default function GanttChart() {
 		addDependency,
 		setModalItemId,
 		setProject,
+		viewportDateRef,
 	} = useGantt();
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const [containerWidth, setContainerWidth] = useState(0);
@@ -145,6 +140,22 @@ export default function GanttChart() {
 		[dayWidth, colWidth, startDate, viewMode],
 	);
 
+	// Track the leftmost visible date so "Add task" (in the sidebar) can
+	// drop a new task near where the user is looking. We nudge one column
+	// in from the very edge so the new bar isn't half-clipped by the
+	// viewport border.
+	const updateViewportDate = useCallback(() => {
+		const el = scrollRef.current;
+		if (!el) return;
+		viewportDateRef.current = getDateAtX(el.scrollLeft + colWidth);
+	}, [getDateAtX, colWidth, viewportDateRef]);
+
+	// Seed / refresh the ref whenever the column layout changes (initial
+	// mount, view-mode switch, data-driven range changes).
+	useLayoutEffect(() => {
+		updateViewportDate();
+	}, [updateViewportDate]);
+
 	// Width of a task bar in pixels.
 	// Day view: days covered × dayWidth.
 	// Week view: whole weeks from the start's week to the end's week ×
@@ -250,7 +261,10 @@ export default function GanttChart() {
 					? point.clientX - rect.left + (scrollEl?.scrollLeft ?? 0)
 					: fromX,
 				mouseY: rect
-					? point.clientY - rect.top + (scrollEl?.scrollTop ?? 0) - HEADER_HEIGHT
+					? point.clientY -
+						rect.top +
+						(scrollEl?.scrollTop ?? 0) -
+						HEADER_HEIGHT
 					: fromY,
 			});
 		},
@@ -267,7 +281,8 @@ export default function GanttChart() {
 					setDepDrag({
 						...depDrag,
 						mouseX: clientX - rect.left + (scrollEl?.scrollLeft ?? 0),
-						mouseY: clientY - rect.top + (scrollEl?.scrollTop ?? 0) - HEADER_HEIGHT,
+						mouseY:
+							clientY - rect.top + (scrollEl?.scrollTop ?? 0) - HEADER_HEIGHT,
 					});
 				}
 				return;
@@ -454,7 +469,10 @@ export default function GanttChart() {
 			if (depDrag) {
 				const touch = e.changedTouches[0];
 				if (touch) {
-					const target = document.elementFromPoint(touch.clientX, touch.clientY);
+					const target = document.elementFromPoint(
+						touch.clientX,
+						touch.clientY,
+					);
 					const taskEl = target?.closest("[data-workitem]");
 					if (taskEl) {
 						const toItemId = taskEl.getAttribute("data-workitem");
@@ -558,6 +576,7 @@ export default function GanttChart() {
 		<div
 			ref={scrollRef}
 			className="flex-1 overflow-auto"
+			onScroll={updateViewportDate}
 			onMouseMove={handleMouseMove}
 			onMouseUp={handleMouseUp}
 			onMouseLeave={handleMouseLeave}
@@ -578,10 +597,12 @@ export default function GanttChart() {
 					{monthGroups.map((g) => (
 						<div
 							key={`${g.label}-${g.startIdx}`}
-							className="flex items-center justify-center border-r border-border/50 font-display text-[11px] font-bold tracking-wide text-foreground"
+							className="flex items-center justify-center overflow-hidden border-r border-border/50 font-display text-[11px] font-bold tracking-wide text-foreground"
 							style={{ width: g.span * colWidth }}
 						>
-							{g.label}
+							<span data-export-clip="nowrap" className="truncate px-1">
+								{g.label}
+							</span>
 						</div>
 					))}
 				</div>
@@ -602,12 +623,11 @@ export default function GanttChart() {
 								? formatDate(col) === formatDate(now)
 								: now >= col && now <= addDays(col, 6);
 						const day = col.getDay();
-						const isWeekend =
-							viewMode === "days" && (day === 0 || day === 6);
+						const isWeekend = viewMode === "days" && (day === 0 || day === 6);
 						return (
 							<div
 								key={formatDate(col)}
-								className={`flex flex-col items-center justify-center border-r border-border/40 text-[10px] leading-tight ${
+								className={`flex flex-col items-center justify-center overflow-hidden border-r border-border/40 text-[10px] leading-tight ${
 									isToday
 										? "bg-primary/8 font-semibold text-primary"
 										: isWeekend
@@ -678,7 +698,9 @@ export default function GanttChart() {
 								<div
 									key={formatDate(col)}
 									className={`absolute top-0 bottom-0 ${
-										isToday ? "border-r border-primary/20" : "border-r border-border/25"
+										isToday
+											? "border-r border-primary/20"
+											: "border-r border-border/25"
 									}`}
 									style={{ left: (i + 1) * colWidth }}
 								/>
