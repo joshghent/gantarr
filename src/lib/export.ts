@@ -37,14 +37,49 @@ type StyleSnapshot = { el: HTMLElement; cssText: string };
 
 const CLIP_VALUES = new Set(["auto", "scroll", "hidden"]);
 
+function depth(el: HTMLElement): number {
+	let d = 0;
+	let node: HTMLElement | null = el.parentElement;
+	while (node) {
+		d++;
+		node = node.parentElement;
+	}
+	return d;
+}
+
+/**
+ * Height of an element's laid-out content, ignoring anything the export
+ * drops. `scrollHeight` can't be used here: it never reports less than the
+ * element's own client height, so a mostly-empty chart would keep reporting
+ * a full viewport.
+ */
+function contentHeight(el: HTMLElement): number {
+	const top = el.getBoundingClientRect().top;
+	let bottom = top;
+	for (const child of Array.from(el.children)) {
+		if (!(child instanceof HTMLElement)) continue;
+		if (child.dataset.noExport !== undefined) continue;
+		const rect = child.getBoundingClientRect();
+		if (rect.width === 0 && rect.height === 0) continue;
+		bottom = Math.max(bottom, rect.bottom);
+	}
+	const cs = getComputedStyle(el);
+	const padding =
+		Number.parseFloat(cs.paddingBottom || "0") +
+		Number.parseFloat(cs.borderBottomWidth || "0");
+	return Math.ceil(bottom - top + padding);
+}
+
 /**
  * The chart lives inside nested scroll containers (horizontal on the
  * chart grid, vertical on the sidebar). html-to-image captures whatever
  * is currently laid out, so anything scrolled off-screen is missing from
  * the export. Before capture we temporarily promote every clipping
  * container to overflow:visible, and size the real scrollers to their
- * full content, so the whole chart lays out on-screen at once. Callers
- * must invoke `restoreAfterCapture` in a finally block.
+ * full content, so the whole chart lays out on-screen at once. Heights go
+ * the other way too: every box collapses onto its content, so a short chart
+ * on a tall screen doesn't export a screenful of blank paper. Callers must
+ * invoke `restoreAfterCapture` in a finally block.
  */
 export function expandForCapture(root: HTMLElement): StyleSnapshot[] {
 	// Text elements opt out of the overflow-visible treatment: instead of
@@ -114,26 +149,48 @@ export function expandForCapture(root: HTMLElement): StyleSnapshot[] {
 		}
 	}
 
+	// Absolutely positioned clippers (the workstream bands) get their size
+	// from top/height, so the flex + height treatment below would destroy
+	// them. They only need the overflow relaxed.
+	const flowClippers = clippers.filter(
+		(el) => getComputedStyle(el).position !== "absolute",
+	);
+
 	for (const el of clippers) {
 		el.style.overflow = "visible";
 		el.style.overflowX = "visible";
 		el.style.overflowY = "visible";
 		el.style.maxWidth = "none";
 		el.style.maxHeight = "none";
+	}
+
+	for (const el of flowClippers) {
+		// Drop flex sizing so the box grows (or shrinks) around the
+		// now-expanded children instead of being held to the viewport.
+		el.style.flex = "none";
 		const size = scrollSizes.get(el);
 		if (size) {
-			// Scroller: pin to measured content size so nothing is clipped.
-			el.style.flex = "none";
+			// Scroller: pin the width to the measured content so nothing is
+			// clipped horizontally.
 			el.style.width = `${size.w}px`;
-			el.style.height = `${size.h}px`;
-		} else if (getComputedStyle(el).position !== "absolute") {
-			// Non-scroller clipper (overflow:hidden wrapper): drop flex
-			// sizing so it grows around the now-expanded children instead
-			// of holding them to the original viewport dimensions. Skip
-			// absolutely positioned bands — their size comes from left/
-			// right/top/bottom and clearing flex would break them.
-			el.style.flex = "none";
 		}
+		// Heights come from the content, never from the viewport: a scroller
+		// with less content than screen reports scrollHeight === clientHeight,
+		// which is what used to leave a screen's worth of blank paper under a
+		// three-row chart.
+		el.style.minHeight = "0";
+		el.style.height = "auto";
+	}
+
+	// The root is a flex item in a full-height column; without this it keeps
+	// stretching to the viewport no matter how short its content is.
+	root.style.alignSelf = "flex-start";
+
+	// Pin each box to its real content height, innermost first so every
+	// parent measures children that have already collapsed.
+	for (const el of [...flowClippers].sort((a, b) => depth(b) - depth(a))) {
+		const height = contentHeight(el);
+		if (height > 0) el.style.height = `${height}px`;
 	}
 
 	// Force the root to size around its (now expanded) content so
@@ -150,6 +207,48 @@ export function restoreAfterCapture(snapshots: StyleSnapshot[]) {
 	}
 }
 
+/** Breathing room kept to the right of the last piece of content. */
+const EXPORT_RIGHT_PAD = 24;
+
+/**
+ * How wide the export actually needs to be.
+ *
+ * The chart always renders a comfortable run of empty columns past the last
+ * task (and enough to fill the viewport), which is right for working in but
+ * shows up in a PNG as a field of blank grid. Measure the rightmost real
+ * content — task bars, their overflow labels, legend chips — and cut there,
+ * snapped out to the next whole day/week column so the grid never ends
+ * mid-cell. html-to-image draws the element into a canvas of exactly this
+ * width, so a smaller number simply crops the empty right-hand side.
+ */
+export function measureExportWidth(root: HTMLElement): number {
+	const full = root.offsetWidth;
+	const rootLeft = root.getBoundingClientRect().left;
+
+	let right = 0;
+	for (const el of root.querySelectorAll<HTMLElement>("[data-export-ink]")) {
+		if (el.closest("[data-no-export]")) continue;
+		const rect = el.getBoundingClientRect();
+		if (rect.width === 0 && rect.height === 0) continue;
+		right = Math.max(right, rect.right - rootLeft);
+	}
+	if (right <= 0) return full;
+
+	right += EXPORT_RIGHT_PAD;
+
+	// Snap out to a column boundary so the last cell is whole.
+	const grid = root.querySelector<HTMLElement>("[data-chart-grid]");
+	const colWidth = Number(grid?.dataset.colWidth ?? 0);
+	if (grid && colWidth > 0) {
+		const gridLeft = grid.getBoundingClientRect().left - rootLeft;
+		if (right > gridLeft) {
+			right = gridLeft + Math.ceil((right - gridLeft) / colWidth) * colWidth;
+		}
+	}
+
+	return Math.max(1, Math.min(full, Math.ceil(right)));
+}
+
 async function captureFullChart(element: HTMLElement): Promise<string> {
 	const snapshots = expandForCapture(element);
 	try {
@@ -163,7 +262,7 @@ async function captureFullChart(element: HTMLElement): Promise<string> {
 			pixelRatio: 2,
 			skipFonts: true,
 			filter: excludeFromExport,
-			width: element.offsetWidth,
+			width: measureExportWidth(element),
 			height: element.offsetHeight,
 		});
 	} finally {

@@ -12,6 +12,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
 	{
+		version: "2026-09-07-colors-arrows-exports",
+		date: "2026-09-07",
+		title: "Distinct colours, multi-link arrows, tighter exports",
+		items: [
+			"New workstreams always take a colour nothing else is using — no more two bands in a row wearing the same blue after a delete or a long project.",
+			"A task can be linked to (and from) as many others as you like — existing arrows no longer swallow the drag that would start the next one.",
+			"Task titles that don't fit their bar are written beside it instead of being squeezed or stacked into an unreadable block.",
+			"PNG/PDF exports are cropped to the chart itself, without the empty grid below and to the right of your work.",
+		],
+	},
+	{
 		version: "2026.07.01-polish",
 		date: "2026-07-01",
 		title: "Cleaner exports & tidier arrows",

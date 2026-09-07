@@ -13,6 +13,7 @@ import {
 	exportPdf,
 	exportPng,
 	loadJson,
+	measureExportWidth,
 	restoreAfterCapture,
 	sanitizeFilename,
 } from "./export";
@@ -362,5 +363,94 @@ describe("expandForCapture — text elements", () => {
 		} finally {
 			restoreAfterCapture(snapshots);
 		}
+	});
+});
+
+describe("measureExportWidth", () => {
+	// jsdom has no layout engine, so the geometry is stubbed: what's under
+	// test is the "how far right does real content reach" arithmetic, not
+	// the browser's box model.
+	function box(el: HTMLElement, left: number, right: number) {
+		el.getBoundingClientRect = () =>
+			({
+				left,
+				right,
+				top: 0,
+				bottom: 20,
+				width: right - left,
+				height: 20,
+				x: left,
+				y: 0,
+				toJSON: () => ({}),
+			}) as DOMRect;
+	}
+
+	function setup(fullWidth: number) {
+		const root = document.createElement("div");
+		Object.defineProperty(root, "offsetWidth", {
+			value: fullWidth,
+			configurable: true,
+		});
+		box(root, 0, fullWidth);
+		document.body.appendChild(root);
+		return root;
+	}
+
+	afterEach(() => {
+		document.body.innerHTML = "";
+	});
+
+	it("falls back to the full width when there's no marked content", () => {
+		const root = setup(2000);
+		expect(measureExportWidth(root)).toBe(2000);
+	});
+
+	it("cuts just past the rightmost piece of content", () => {
+		const root = setup(2000);
+		const bar = document.createElement("div");
+		bar.dataset.exportInk = "true";
+		box(bar, 300, 500);
+		root.appendChild(bar);
+		// 500 + 24px of breathing room
+		expect(measureExportWidth(root)).toBe(524);
+	});
+
+	it("never returns more than the element's own width", () => {
+		const root = setup(600);
+		const bar = document.createElement("div");
+		bar.dataset.exportInk = "true";
+		box(bar, 0, 595);
+		root.appendChild(bar);
+		expect(measureExportWidth(root)).toBe(600);
+	});
+
+	it("ignores content that the export drops anyway", () => {
+		const root = setup(2000);
+		const kept = document.createElement("div");
+		kept.dataset.exportInk = "true";
+		box(kept, 0, 400);
+		const dropped = document.createElement("div");
+		dropped.dataset.noExport = "true";
+		const inner = document.createElement("div");
+		inner.dataset.exportInk = "true";
+		box(inner, 0, 1800);
+		dropped.appendChild(inner);
+		root.append(kept, dropped);
+		expect(measureExportWidth(root)).toBe(424);
+	});
+
+	it("rounds out to a whole day/week column", () => {
+		const root = setup(2000);
+		const grid = document.createElement("div");
+		grid.dataset.chartGrid = "true";
+		grid.dataset.colWidth = "36";
+		box(grid, 200, 2000);
+		const bar = document.createElement("div");
+		bar.dataset.exportInk = "true";
+		box(bar, 300, 500);
+		grid.appendChild(bar);
+		root.appendChild(grid);
+		// 500 + 24 = 524 -> 9 columns of 36 past the grid's left edge (200)
+		expect(measureExportWidth(root)).toBe(200 + 36 * 9);
 	});
 });
