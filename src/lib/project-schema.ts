@@ -7,7 +7,7 @@ import type {
 	WorkItem,
 	Workstream,
 } from "../types";
-import { DEFAULT_LEGEND, WORKSTREAM_PALETTE } from "./gantt-store";
+import { DEFAULT_LEGEND, pickWorkstreamColor } from "./gantt-store";
 
 // ---------------------------------------------------------------------------
 // Full GanttProject validation
@@ -152,8 +152,10 @@ export function buildProject(rawInput: ChartInput): GanttProject {
 			id: wsId,
 			label: ws.label,
 			order: wsIndex,
-			color:
-				ws.color ?? WORKSTREAM_PALETTE[wsIndex % WORKSTREAM_PALETTE.length],
+			// Pick against the colours already assigned in this import so a
+			// project with more workstreams than palette entries — or one
+			// that pins a few colours explicitly — still gets distinct bands.
+			color: ws.color ?? pickWorkstreamColor(workstreams.map((w) => w.color)),
 		});
 
 		ws.tasks.forEach((task, taskIndex) => {

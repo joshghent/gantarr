@@ -1,7 +1,15 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { getContrastText } from "#/lib/colors";
 import { useGantt } from "#/lib/gantt-context";
 import { getItemColor } from "#/lib/gantt-layout";
 import type { WorkItem } from "#/types";
+
+/**
+ * Minimum room to the right of a bar before we bother spilling the label
+ * out there — below this an outside label is just an ellipsis, so the
+ * title stays inside the bar instead.
+ */
+const MIN_OUTSIDE_LABEL_SPACE = 44;
 
 interface WorkItemBarProps {
 	item: WorkItem;
@@ -11,6 +19,8 @@ interface WorkItemBarProps {
 	height: number;
 	isSelected: boolean;
 	isDraggingDep: boolean;
+	/** Free pixels between this bar's right edge and the next bar in its row. */
+	labelSpaceRight: number;
 	onMouseDown: (
 		e: React.MouseEvent | React.TouchEvent,
 		itemId: string,
@@ -40,6 +50,7 @@ function WorkItemBarInner({
 	height,
 	isSelected,
 	isDraggingDep,
+	labelSpaceRight,
 	onMouseDown,
 	onClick,
 	onDoubleClick,
@@ -53,7 +64,9 @@ function WorkItemBarInner({
 		setModalItemId,
 	} = useGantt();
 	const inputRef = useRef<HTMLInputElement>(null);
+	const labelRef = useRef<HTMLSpanElement>(null);
 	const [titleDraft, setTitleDraft] = useState(item.title);
+	const [labelOverflows, setLabelOverflows] = useState(false);
 
 	const isEditing = editingItemId === item.id;
 
@@ -68,10 +81,27 @@ function WorkItemBarInner({
 		}
 	}, [isEditing]);
 
+	// Does the title fit inside the bar? Short tasks are only a column or
+	// two wide, so their titles used to be cut down to an ellipsis (and in
+	// exports, wrapped into an unreadable stack). Measure the label and, if
+	// it doesn't fit, render it beside the bar instead. The measured span
+	// stays in the DOM (hidden, not unmounted) so the measurement is stable
+	// and can't oscillate between the two layouts. Runs on every render —
+	// the title, the bar width and the font can all move it — and settles
+	// immediately because an unchanged result doesn't re-render.
+	useLayoutEffect(() => {
+		const el = labelRef.current;
+		if (!el) return;
+		setLabelOverflows(el.scrollWidth > el.clientWidth + 1);
+	});
+
 	const workstream = project.workstreams.find(
 		(ws) => ws.id === item.workstreamId,
 	);
 	const color = getItemColor(item, workstream, project);
+
+	const showOutsideLabel =
+		!isEditing && labelOverflows && labelSpaceRight >= MIN_OUTSIDE_LABEL_SPACE;
 
 	const commitTitle = () => {
 		if (titleDraft.trim()) {
@@ -103,7 +133,7 @@ function WorkItemBarInner({
 	return (
 		<div
 			data-workitem={item.id}
-			data-export-clip="wrap"
+			data-export-ink="true"
 			className={`group absolute flex items-center rounded-lg border text-xs font-medium transition-shadow select-none ${
 				isSelected
 					? "ring-2 ring-primary/70 ring-offset-1 z-10 shadow-sm"
@@ -163,8 +193,31 @@ function WorkItemBarInner({
 				/>
 			) : (
 				<span
-					data-export-clip="wrap"
+					ref={labelRef}
+					data-export-clip="nowrap"
 					className="min-w-0 flex-1 truncate whitespace-nowrap px-3"
+					// Hidden rather than removed: the browser keeps laying it
+					// out, so the overflow measurement above stays valid.
+					style={showOutsideLabel ? { visibility: "hidden" } : undefined}
+				>
+					{item.title}
+				</span>
+			)}
+
+			{/* Overflow label — sits to the right of a bar that's too narrow
+			    for its own title, capped at the gap before the next task so
+			    it never runs over its neighbour. */}
+			{showOutsideLabel && (
+				<span
+					data-export-clip="nowrap"
+					data-export-ink="true"
+					className="pointer-events-none absolute top-1/2 -translate-y-1/2 truncate whitespace-nowrap text-foreground"
+					style={{
+						left: "100%",
+						marginLeft: 10,
+						maxWidth: Math.max(0, labelSpaceRight - 14),
+					}}
+					title={item.title}
 				>
 					{item.title}
 				</span>
@@ -182,11 +235,14 @@ function WorkItemBarInner({
 				/>
 			)}
 
-			{/* Connector port — drag from here to create a dependency */}
+			{/* Connector port — drag from here to create a dependency.
+			    Sits above the dependency-arrow layer (z-index 5) so an
+			    existing arrow leaving this task can't swallow the drag
+			    that would start the next one. */}
 			{!isEditing && !isDraggingDep && (
 				<div
 					data-no-export="true"
-					className="absolute -right-1.5 top-1/2 -translate-y-1/2 h-2.5 w-2.5 touch-none rounded-full border-2 border-white bg-muted-foreground opacity-70 group-hover:opacity-100 cursor-crosshair shadow-sm hover:bg-primary hover:scale-110 transition-all"
+					className="absolute -right-1.5 top-1/2 z-20 -translate-y-1/2 h-2.5 w-2.5 touch-none rounded-full border-2 border-white bg-muted-foreground opacity-70 group-hover:opacity-100 cursor-crosshair shadow-sm hover:bg-primary hover:scale-110 transition-all"
 					onMouseDown={(e) => onConnectorDragStart(e, item.id)}
 					onTouchStart={(e) => onConnectorDragStart(e, item.id)}
 					onClick={(e) => e.stopPropagation()}
@@ -199,21 +255,3 @@ function WorkItemBarInner({
 
 const WorkItemBar = memo(WorkItemBarInner);
 export default WorkItemBar;
-
-function getContrastText(hex: string): string {
-	const rgb = hexToRgb(hex);
-	if (!rgb) return "#ffffff";
-	const luminance = (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b) / 255;
-	return luminance > 0.55 ? "#1a1a1a" : "#ffffff";
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-	const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-	return result
-		? {
-				r: parseInt(result[1], 16),
-				g: parseInt(result[2], 16),
-				b: parseInt(result[3], 16),
-			}
-		: null;
-}

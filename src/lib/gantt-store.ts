@@ -6,19 +6,56 @@ import type {
 	WorkItem,
 	Workstream,
 } from "../types";
+import { hslToHex, normalizeColor } from "./colors";
 import { formatDate, today } from "./dates";
 
-// Palette used to assign colors to new workstreams (cycles through)
+// Palette used to assign colors to new workstreams. Ordered so that
+// neighbouring entries are far apart in hue — consecutive workstreams
+// should never read as "the same colour with a slight shift".
 export const WORKSTREAM_PALETTE = [
 	"#e76f51", // red-orange
-	"#f4a261", // orange
-	"#e9c46a", // yellow
 	"#2a9d8f", // teal
-	"#264653", // dark blue
-	"#8ecae6", // sky blue
-	"#a78bfa", // purple
+	"#4c6ef5", // indigo
+	"#f4a261", // orange
+	"#a855f7", // purple
+	"#2f9e44", // green
 	"#f472b6", // pink
+	"#0891b2", // cyan
+	"#b45309", // amber-brown
+	"#264653", // dark slate
+	"#c1121f", // crimson
+	"#6d597a", // plum
 ];
+
+/**
+ * Pick a colour for a new workstream.
+ *
+ * The old implementation indexed the palette by workstream *count*, so any
+ * delete (or a project that outgrew the palette) handed the next workstream
+ * a colour that was already on screen — two bands in a row wearing the same
+ * blue. Instead we take the first palette entry nobody is using, and once
+ * the palette is exhausted we walk the colour wheel by the golden angle,
+ * which keeps generated colours well separated from each other.
+ */
+export function pickWorkstreamColor(usedColors: string[]): string {
+	const used = new Set(usedColors.map(normalizeColor));
+
+	const unused = WORKSTREAM_PALETTE.find((c) => !used.has(normalizeColor(c)));
+	if (unused) return unused;
+
+	// Palette exhausted — generate. 137.5° is the golden angle: stepping
+	// hue by it never revisits a hue until the wheel is densely filled.
+	for (let i = 0; i < 360; i++) {
+		const hue = (i * 137.5 + 20) % 360;
+		const candidate = hslToHex(hue, 0.62, 0.45);
+		if (!used.has(normalizeColor(candidate))) return candidate;
+	}
+	return WORKSTREAM_PALETTE[0];
+}
+
+function nextWorkstreamColor(project: GanttProject): string {
+	return pickWorkstreamColor(project.workstreams.map((ws) => ws.color));
+}
 
 export const DEFAULT_LEGEND = [
 	{ label: "Development", color: "#3b82f6" },
@@ -27,12 +64,6 @@ export const DEFAULT_LEGEND = [
 	{ label: "Business Change", color: "#22c55e" },
 	{ label: "QA", color: "#ef4444" },
 ];
-
-function nextWorkstreamColor(project: GanttProject): string {
-	return WORKSTREAM_PALETTE[
-		project.workstreams.length % WORKSTREAM_PALETTE.length
-	];
-}
 
 export function createProject(name: string): GanttProject {
 	const legend: LegendEntry[] = DEFAULT_LEGEND.map((c) => ({

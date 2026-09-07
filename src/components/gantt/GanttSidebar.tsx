@@ -1,6 +1,7 @@
 import { GripVertical, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Input } from "#/components/ui/input";
+import { getContrastText } from "#/lib/colors";
 import { useGantt } from "#/lib/gantt-context";
 import { buildLayout } from "#/lib/gantt-layout";
 
@@ -177,6 +178,7 @@ export default function GanttSidebar() {
 					return (
 						<div
 							key={ws.id}
+							data-export-ink="true"
 							className={`group absolute left-0 right-0 flex overflow-hidden ${isDragging ? "opacity-40" : ""}`}
 							style={{
 								top,
@@ -225,7 +227,16 @@ export default function GanttSidebar() {
 								) : (
 									<span
 										data-export-clip="wrap"
-										className="line-clamp-2 select-none font-display text-[13px] font-bold leading-tight tracking-tight text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.2)]"
+										className="line-clamp-2 select-none font-display text-[13px] font-bold leading-tight tracking-tight"
+										// Light bands (yellows, sky blues) turned the
+										// white label to mush — follow the band colour.
+										style={{
+											color: getContrastText(ws.color),
+											textShadow:
+												getContrastText(ws.color) === "#ffffff"
+													? "0 1px 2px rgba(0,0,0,0.2)"
+													: undefined,
+										}}
 									>
 										{ws.label}
 									</span>

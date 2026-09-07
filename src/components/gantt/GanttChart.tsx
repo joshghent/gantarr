@@ -179,6 +179,32 @@ export default function GanttChart() {
 		[startDate, dayWidth, colWidth, viewMode],
 	);
 
+	// How much empty room each bar has to its right, up to the next task
+	// in the same row. WorkItemBar uses it to decide whether a title that
+	// doesn't fit inside the bar can spill out beside it. Deliberately
+	// independent of dragState so bars stay memo-stable mid-drag.
+	const labelSpace = useMemo(() => {
+		const rows = new Map<number, { x: number; end: number; id: string }[]>();
+		for (const item of project.workItems) {
+			const rowIndex = getTaskRowIndex(layout, item.id);
+			if (rowIndex === -1) continue;
+			const x = getX(item.startDate);
+			const bar = { x, end: x + getItemWidth(item), id: item.id };
+			const row = rows.get(rowIndex);
+			if (row) row.push(bar);
+			else rows.set(rowIndex, [bar]);
+		}
+		const space = new Map<string, number>();
+		for (const row of rows.values()) {
+			row.sort((a, b) => a.x - b.x);
+			row.forEach((bar, i) => {
+				const next = row[i + 1];
+				space.set(bar.id, Math.max(0, (next ? next.x : totalWidth) - bar.end));
+			});
+		}
+		return space;
+	}, [project.workItems, layout, getX, getItemWidth, totalWidth]);
+
 	// --- Task drag state ---
 	// Dragging is a pure *visual* preview — we never touch project state
 	// until mouseup, so buildLayout doesn't re-run and the other bars
@@ -588,6 +614,10 @@ export default function GanttChart() {
 			<div
 				style={{ width: totalWidth, minHeight: totalHeight + HEADER_HEIGHT }}
 				className="relative"
+				// Export uses these to trim trailing empty columns without
+				// cutting through the middle of a day/week cell.
+				data-chart-grid="true"
+				data-col-width={colWidth}
 			>
 				{/* Month header row */}
 				<div
@@ -731,6 +761,10 @@ export default function GanttChart() {
 						getItemWidth={getItemWidth}
 						rowHeight={ROW_HEIGHT}
 						layout={layout}
+						// While a new arrow is being dragged the existing ones
+						// must not intercept the drop — otherwise you can't
+						// land on a task that already has an arrow.
+						interactive={depDrag === null}
 					/>
 
 					{/* Temporary dependency drag line */}
@@ -796,6 +830,7 @@ export default function GanttChart() {
 								height={ROW_HEIGHT - 12}
 								isSelected={selectedItemId === item.id}
 								isDraggingDep={depDrag !== null}
+								labelSpaceRight={labelSpace.get(item.id) ?? 0}
 								onMouseDown={handleMouseDown}
 								onClick={handleItemClick}
 								onDoubleClick={handleItemDoubleClick}
