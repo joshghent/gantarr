@@ -11,6 +11,41 @@ import type { WorkItem } from "#/types";
  */
 const MIN_OUTSIDE_LABEL_SPACE = 44;
 
+/** Horizontal padding (px-3 a side) the inside label sits in. */
+const INSIDE_LABEL_PADDING = 24;
+
+/**
+ * Gap the outside label leaves between the bar it belongs to and the next
+ * task: 10px of margin plus 4px of breathing room before the neighbour.
+ */
+const OUTSIDE_LABEL_INSET = 14;
+
+/**
+ * Text room a bar must offer before an overflowing title is allowed to
+ * stay inside it. Above this a truncated title still reads ("New course
+ * page + mig…"); below it the bar is a column-wide sliver whose inside
+ * text would be nothing but an ellipsis.
+ */
+const MIN_INSIDE_LABEL_WIDTH = 64;
+
+/**
+ * Where a title that doesn't fit its bar goes. Any overflowing title used
+ * to be written beside its bar, which left wide bars sitting empty with
+ * their title floating out in the grid — and truncated out there anyway.
+ * A bar wide enough to read keeps its title inside; only slivers hand it
+ * to the gap on their right, and only when that gap shows more of the
+ * title than the bar itself would.
+ */
+export function shouldRenderLabelOutside(
+	barWidth: number,
+	labelSpaceRight: number,
+): boolean {
+	const insideWidth = barWidth - INSIDE_LABEL_PADDING;
+	if (insideWidth >= MIN_INSIDE_LABEL_WIDTH) return false;
+	const outsideWidth = labelSpaceRight - OUTSIDE_LABEL_INSET;
+	return outsideWidth >= MIN_OUTSIDE_LABEL_SPACE && outsideWidth > insideWidth;
+}
+
 interface WorkItemBarProps {
 	item: WorkItem;
 	x: number;
@@ -81,14 +116,14 @@ function WorkItemBarInner({
 		}
 	}, [isEditing]);
 
-	// Does the title fit inside the bar? Short tasks are only a column or
-	// two wide, so their titles used to be cut down to an ellipsis (and in
-	// exports, wrapped into an unreadable stack). Measure the label and, if
-	// it doesn't fit, render it beside the bar instead. The measured span
-	// stays in the DOM (hidden, not unmounted) so the measurement is stable
-	// and can't oscillate between the two layouts. Runs on every render —
-	// the title, the bar width and the font can all move it — and settles
-	// immediately because an unchanged result doesn't re-render.
+	// Does the title fit inside the bar? Most overflowing titles simply
+	// truncate in place; only a bar too narrow to read (see
+	// shouldRenderLabelOutside) hands its title to the space beside it. The
+	// measured span stays in the DOM (hidden, not unmounted) so the
+	// measurement is stable and can't oscillate between the two layouts.
+	// Runs on every render — the title, the bar width and the font can all
+	// move it — and settles immediately because an unchanged result doesn't
+	// re-render.
 	useLayoutEffect(() => {
 		const el = labelRef.current;
 		if (!el) return;
@@ -100,8 +135,11 @@ function WorkItemBarInner({
 	);
 	const color = getItemColor(item, workstream, project);
 
+	const barWidth = Math.max(width, 24);
 	const showOutsideLabel =
-		!isEditing && labelOverflows && labelSpaceRight >= MIN_OUTSIDE_LABEL_SPACE;
+		!isEditing &&
+		labelOverflows &&
+		shouldRenderLabelOutside(barWidth, labelSpaceRight);
 
 	const commitTitle = () => {
 		if (titleDraft.trim()) {
@@ -144,7 +182,7 @@ function WorkItemBarInner({
 			style={{
 				left: x,
 				top: y,
-				width: Math.max(width, 24),
+				width: barWidth,
 				height,
 				backgroundColor: color,
 				borderColor: `color-mix(in srgb, ${color} 80%, black)`,
@@ -199,14 +237,15 @@ function WorkItemBarInner({
 					// Hidden rather than removed: the browser keeps laying it
 					// out, so the overflow measurement above stays valid.
 					style={showOutsideLabel ? { visibility: "hidden" } : undefined}
+					title={labelOverflows && !showOutsideLabel ? item.title : undefined}
 				>
 					{item.title}
 				</span>
 			)}
 
-			{/* Overflow label — sits to the right of a bar that's too narrow
-			    for its own title, capped at the gap before the next task so
-			    it never runs over its neighbour. */}
+			{/* Overflow label — sits to the right of a sliver of a bar with no
+			    room for readable text of its own, capped at the gap before the
+			    next task so it never runs over its neighbour. */}
 			{showOutsideLabel && (
 				<span
 					data-export-clip="nowrap"
@@ -215,7 +254,7 @@ function WorkItemBarInner({
 					style={{
 						left: "100%",
 						marginLeft: 10,
-						maxWidth: Math.max(0, labelSpaceRight - 14),
+						maxWidth: Math.max(0, labelSpaceRight - OUTSIDE_LABEL_INSET),
 					}}
 					title={item.title}
 				>
