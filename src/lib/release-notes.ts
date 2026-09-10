@@ -12,6 +12,15 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
 	{
+		version: "2026-09-10-labels-inside-bars",
+		date: "2026-09-10",
+		title: "Task titles stay in their bars",
+		items: [
+			"Long task titles are trimmed inside their bar again instead of being written out in the empty grid beside it — hover a trimmed title to read it in full.",
+			"Only a bar too narrow to hold any readable text still puts its title alongside, and only when there's room to show more of it there.",
+		],
+	},
+	{
 		version: "2026-09-07-colors-arrows-exports",
 		date: "2026-09-07",
 		title: "Distinct colours, multi-link arrows, tighter exports",
