@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/useArrowFunction: Vitest constructs the jsPDF mock with `new`, which needs a function expression
 import {
 	afterEach,
 	beforeEach,
@@ -25,10 +26,9 @@ vi.mock("html-to-image", () => ({
 	toPng: vi.fn(() => Promise.resolve("data:image/png;base64,mock")),
 }));
 vi.mock("jspdf", () => ({
-	jsPDF: vi.fn().mockImplementation(() => ({
-		addImage: vi.fn(),
-		save: vi.fn(),
-	})),
+	jsPDF: vi.fn(function () {
+		return { addImage: vi.fn(), save: vi.fn() };
+	}),
 }));
 
 describe("sanitizeFilename", () => {
@@ -270,9 +270,9 @@ describe("exportPdf", () => {
 		const { jsPDF } = await import("jspdf");
 		vi.mocked(toPng).mockResolvedValue("data:image/png;base64,mock");
 		const mockPdf = { addImage: vi.fn(), save: vi.fn() };
-		vi.mocked(jsPDF).mockReturnValue(
-			mockPdf as unknown as InstanceType<typeof jsPDF>,
-		);
+		vi.mocked(jsPDF).mockImplementation(function () {
+			return mockPdf as unknown as InstanceType<typeof jsPDF>;
+		});
 
 		await exportPdf(mockElement, "Test Project");
 
@@ -284,9 +284,9 @@ describe("exportPdf", () => {
 		const { jsPDF } = await import("jspdf");
 		vi.mocked(toPng).mockResolvedValue("data:image/png;base64,mock");
 		const mockPdf = { addImage: vi.fn(), save: vi.fn() };
-		vi.mocked(jsPDF).mockReturnValue(
-			mockPdf as unknown as InstanceType<typeof jsPDF>,
-		);
+		vi.mocked(jsPDF).mockImplementation(function () {
+			return mockPdf as unknown as InstanceType<typeof jsPDF>;
+		});
 
 		global.Image = class MockImage {
 			onload: (() => void) | null = null;
@@ -310,9 +310,9 @@ describe("exportPdf", () => {
 		const { jsPDF } = await import("jspdf");
 		vi.mocked(toPng).mockResolvedValue("data:image/png;base64,mock");
 		const mockPdf = { addImage: vi.fn(), save: vi.fn() };
-		vi.mocked(jsPDF).mockReturnValue(
-			mockPdf as unknown as InstanceType<typeof jsPDF>,
-		);
+		vi.mocked(jsPDF).mockImplementation(function () {
+			return mockPdf as unknown as InstanceType<typeof jsPDF>;
+		});
 
 		await exportPdf(mockElement, "My<Project>:Name");
 
