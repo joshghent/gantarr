@@ -33,7 +33,7 @@ export default function ReleaseNotesDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-lg">
+			<DialogContent className="flex max-h-[85vh] flex-col sm:max-w-lg">
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2 font-display tracking-tight">
 						<Sparkles className="h-4 w-4 text-primary" />
@@ -41,7 +41,7 @@ export default function ReleaseNotesDialog({
 					</DialogTitle>
 				</DialogHeader>
 
-				<div className="space-y-5">
+				<div className="-mr-6 min-h-0 flex-1 space-y-5 overflow-y-auto pr-6">
 					{RELEASE_NOTES.map((note) => (
 						<section key={note.version}>
 							<h4 className="mb-2 flex items-baseline gap-2">
@@ -64,40 +64,40 @@ export default function ReleaseNotesDialog({
 							</ul>
 						</section>
 					))}
+				</div>
 
-					{/* Quick-connect box for AI clients. */}
-					<div className="rounded-lg border border-border bg-muted/40 p-3">
-						<p className="mb-2 font-display text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
-							Connect an AI client
-						</p>
-						<div className="flex items-center gap-2">
-							<code className="flex-1 truncate rounded border border-border bg-card px-2 py-1 font-mono text-xs text-foreground">
-								{mcpUrl}
-							</code>
-							<Button
-								variant="outline"
-								size="sm"
-								className="shrink-0 text-xs"
-								onClick={copyMcp}
-								title="Copy MCP endpoint"
-							>
-								{copied ? (
-									<Check className="h-3.5 w-3.5" />
-								) : (
-									<Copy className="h-3.5 w-3.5" />
-								)}
-							</Button>
-						</div>
-						<a
-							href="/llms.txt"
-							target="_blank"
-							rel="noopener noreferrer"
-							className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+				{/* Quick-connect box for AI clients. */}
+				<div className="shrink-0 rounded-lg border border-border bg-muted/40 p-3">
+					<p className="mb-2 font-display text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+						Connect an AI client
+					</p>
+					<div className="flex items-center gap-2">
+						<code className="flex-1 truncate rounded border border-border bg-card px-2 py-1 font-mono text-xs text-foreground">
+							{mcpUrl}
+						</code>
+						<Button
+							variant="outline"
+							size="sm"
+							className="shrink-0 text-xs"
+							onClick={copyMcp}
+							title="Copy MCP endpoint"
 						>
-							View the AI guide (/llms.txt)
-							<ExternalLink className="h-3 w-3" />
-						</a>
+							{copied ? (
+								<Check className="h-3.5 w-3.5" />
+							) : (
+								<Copy className="h-3.5 w-3.5" />
+							)}
+						</Button>
 					</div>
+					<a
+						href="/llms.txt"
+						target="_blank"
+						rel="noopener noreferrer"
+						className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+					>
+						View the AI guide (/llms.txt)
+						<ExternalLink className="h-3 w-3" />
+					</a>
 				</div>
 			</DialogContent>
 		</Dialog>
