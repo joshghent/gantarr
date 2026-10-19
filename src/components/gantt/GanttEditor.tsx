@@ -261,7 +261,11 @@ function GanttEditorInner() {
 				onOpenWhatsNew={() => setReleaseOpen(true)}
 			/>
 			<div className="relative flex flex-1 overflow-hidden">
-				<div ref={chartRef} className="flex flex-1 overflow-hidden">
+				<div
+					ref={chartRef}
+					data-gantt-body="true"
+					className="flex flex-1 overflow-hidden"
+				>
 					<GanttSidebar />
 					<div className="flex flex-1 flex-col overflow-hidden">
 						<div className="flex flex-1 overflow-hidden">
