@@ -601,6 +601,7 @@ export default function GanttChart() {
 	return (
 		<div
 			ref={scrollRef}
+			data-gantt-scroll="true"
 			className="flex-1 overflow-auto"
 			onScroll={updateViewportDate}
 			onMouseMove={handleMouseMove}

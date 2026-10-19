@@ -26,7 +26,9 @@ export default function GanttSidebar() {
 	// Drag-to-reorder state
 	const [dragWsId, setDragWsId] = useState<string | null>(null);
 	const [dropTargetIdx, setDropTargetIdx] = useState<number | null>(null);
+	const viewportRef = useRef<HTMLDivElement>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
+	const [padBottom, setPadBottom] = useState(0);
 	const bandRectsRef = useRef<{ id: string; top: number; height: number }[]>(
 		[],
 	);
@@ -37,6 +39,36 @@ export default function GanttSidebar() {
 			inputRef.current.select();
 		}
 	}, [editingId]);
+
+	// The chart owns vertical scrolling; keep the sidebar body locked to it
+	// so rows and workstream bands never drift apart. Bottom padding makes
+	// the two scroll ranges equal (legend panel + scrollbar shrink the chart
+	// viewport but not the sidebar's).
+	useEffect(() => {
+		const body = viewportRef.current;
+		const chart = body
+			?.closest("[data-gantt-body]")
+			?.querySelector<HTMLElement>("[data-gantt-scroll]");
+		if (!body || !chart) return;
+		const sync = () => {
+			body.scrollTop = chart.scrollTop;
+		};
+		const measure = () => {
+			setPadBottom(
+				Math.max(0, body.clientHeight + HEADER_HEIGHT - chart.clientHeight),
+			);
+			sync();
+		};
+		chart.addEventListener("scroll", sync);
+		const ro = new ResizeObserver(measure);
+		ro.observe(body);
+		ro.observe(chart);
+		measure();
+		return () => {
+			chart.removeEventListener("scroll", sync);
+			ro.disconnect();
+		};
+	}, []);
 
 	const layout = buildLayout(project);
 	const sortedWs = [...project.workstreams].sort((a, b) => a.order - b.order);
@@ -161,9 +193,21 @@ export default function GanttSidebar() {
 			</div>
 
 			<div
+				ref={viewportRef}
+				className="min-h-0 flex-1 overflow-hidden"
+				onWheel={(e) => {
+					const chart = viewportRef.current
+						?.closest("[data-gantt-body]")
+						?.querySelector<HTMLElement>("[data-gantt-scroll]");
+					chart?.scrollBy({ top: e.deltaY });
+				}}
+			>
+			<div
 				ref={containerRef}
-				className="relative flex-1 overflow-y-auto"
-				style={{ minHeight: layout.totalRows * ROW_HEIGHT + 40 }}
+				className="relative"
+				style={{
+					height: Math.max(layout.totalRows, 1) * ROW_HEIGHT + 40 + padBottom,
+				}}
 			>
 				{/* Workstream bands */}
 				{layout.bands.map((band, bandIdx) => {
@@ -320,6 +364,7 @@ export default function GanttSidebar() {
 					<Plus className="h-3.5 w-3.5" />
 					Workstream
 				</button>
+			</div>
 			</div>
 		</div>
 	);
