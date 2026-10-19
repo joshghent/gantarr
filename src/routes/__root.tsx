@@ -50,11 +50,20 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 const NAME_SHIM =
   'window.__name=window.__name||function(f,n){try{Object.defineProperty(f,"name",{value:n,configurable:true})}catch(e){}return f}'
 
+const GA_ID = 'G-M41M226FZ9'
+const GA_INIT = `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${GA_ID}');`
+
 function RootDocument({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
         <HeadContent />
+        <script
+          async
+          src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
+        />
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: intentional inline GA init */}
+        <script dangerouslySetInnerHTML={{ __html: GA_INIT }} />
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: intentional inline shim */}
         <script dangerouslySetInnerHTML={{ __html: NAME_SHIM }} />
       </head>
