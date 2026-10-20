@@ -27,6 +27,12 @@ interface GanttContextValue {
 	isDirty: boolean;
 	markClean: () => void;
 
+	// Undo / redo history of project edits
+	undo: () => void;
+	redo: () => void;
+	canUndo: boolean;
+	canRedo: boolean;
+
 	// Workstream operations
 	addWorkstream: (label: string) => void;
 	updateWorkstream: (
@@ -81,6 +87,8 @@ interface GanttContextValue {
 	viewportDateRef: MutableRefObject<string | null>;
 }
 
+const MAX_HISTORY = 100;
+
 const GanttContext = createContext<GanttContextValue | null>(null);
 
 export function GanttProvider({
@@ -91,6 +99,12 @@ export function GanttProvider({
 	children: ReactNode;
 }) {
 	const [project, setProjectState] = useState<GanttProject>(initialProject);
+	// Mirror of `project` readable synchronously so history snapshots are
+	// exact even when several mutations land in the same event.
+	const projectRef = useRef<GanttProject>(initialProject);
+	const pastRef = useRef<GanttProject[]>([]);
+	const futureRef = useRef<GanttProject[]>([]);
+	const [historySize, setHistorySize] = useState({ past: 0, future: 0 });
 	const [viewMode, setViewMode] = useState<ViewMode>("days");
 	const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 	const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
@@ -103,21 +117,64 @@ export function GanttProvider({
 	// actions (CRUD operations, rename, reorder) flip this to true.
 	const [isDirty, setIsDirty] = useState(false);
 
-	// Internal helper: every store mutation routes through here so we
-	// don't have to remember to flip isDirty in every callback.
-	const mutate = useCallback((updater: (p: GanttProject) => GanttProject) => {
-		setProjectState(updater);
-		setIsDirty(true);
+	const syncHistorySize = useCallback(() => {
+		setHistorySize({
+			past: pastRef.current.length,
+			future: futureRef.current.length,
+		});
 	}, []);
+
+	// Replace the project and record the previous one for undo.
+	const commit = useCallback(
+		(next: GanttProject) => {
+			const prev = projectRef.current;
+			if (next === prev) return;
+			pastRef.current.push(prev);
+			if (pastRef.current.length > MAX_HISTORY) pastRef.current.shift();
+			futureRef.current = [];
+			projectRef.current = next;
+			setProjectState(next);
+			setIsDirty(true);
+			syncHistorySize();
+		},
+		[syncHistorySize],
+	);
+
+	// Internal helper: every store mutation routes through here so we
+	// don't have to remember to flip isDirty or record history in every
+	// callback.
+	const mutate = useCallback(
+		(updater: (p: GanttProject) => GanttProject) => {
+			commit(updater(projectRef.current));
+		},
+		[commit],
+	);
 
 	// Whole-project replacement used for mutations that aren't a simple
 	// single-field edit (e.g. drag-to-reorder in the sidebar, rename in
 	// the toolbar). Also marks dirty — the only way to *reset* dirty is
 	// to call markClean() explicitly after save or load.
-	const setProject = useCallback((p: GanttProject) => {
-		setProjectState(p);
+	const setProject = commit;
+
+	const undo = useCallback(() => {
+		const prev = pastRef.current.pop();
+		if (!prev) return;
+		futureRef.current.push(projectRef.current);
+		projectRef.current = prev;
+		setProjectState(prev);
 		setIsDirty(true);
-	}, []);
+		syncHistorySize();
+	}, [syncHistorySize]);
+
+	const redo = useCallback(() => {
+		const next = futureRef.current.pop();
+		if (!next) return;
+		pastRef.current.push(projectRef.current);
+		projectRef.current = next;
+		setProjectState(next);
+		setIsDirty(true);
+		syncHistorySize();
+	}, [syncHistorySize]);
 
 	const markClean = useCallback(() => {
 		setIsDirty(false);
@@ -253,6 +310,10 @@ export function GanttProvider({
 				setProject,
 				isDirty,
 				markClean,
+				undo,
+				redo,
+				canUndo: historySize.past > 0,
+				canRedo: historySize.future > 0,
 				addWorkstream,
 				updateWorkstream,
 				deleteWorkstream,

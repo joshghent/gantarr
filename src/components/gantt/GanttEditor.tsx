@@ -29,6 +29,8 @@ function GanttEditorInner() {
 		setProject,
 		isDirty,
 		markClean,
+		undo,
+		redo,
 		editingItemId,
 		modalItemId,
 	} = useGantt();
@@ -186,6 +188,23 @@ function GanttEditorInner() {
 				return;
 			}
 
+			// Cmd/Ctrl+Z — undo; Cmd/Ctrl+Shift+Z or Ctrl+Y — redo. Left to
+			// the browser while typing so text fields keep native undo.
+			if ((e.metaKey || e.ctrlKey) && !e.altKey && !editable) {
+				const key = e.key.toLowerCase();
+				if (key === "z") {
+					e.preventDefault();
+					if (e.shiftKey) redo();
+					else undo();
+					return;
+				}
+				if (key === "y") {
+					e.preventDefault();
+					redo();
+					return;
+				}
+			}
+
 			// Escape — close help, deselect, leave the rest to dialogs.
 			if (e.key === "Escape") {
 				if (helpOpen) {
@@ -247,6 +266,8 @@ function GanttEditorInner() {
 		addWorkstream,
 		project,
 		markClean,
+		undo,
+		redo,
 		handleLoadWithConfirm,
 		helpOpen,
 		editingItemId,
