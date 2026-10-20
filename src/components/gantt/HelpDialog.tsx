@@ -18,6 +18,8 @@ const SHORTCUT_GROUPS: {
 			{ keys: ["Enter"], label: "Edit selected task title" },
 			{ keys: ["Esc"], label: "Deselect / cancel edit" },
 			{ keys: ["N"], label: "New workstream" },
+			{ keys: ["⌘/Ctrl", "Z"], label: "Undo" },
+			{ keys: ["⌘/Ctrl", "Shift", "Z"], label: "Redo (or Ctrl+Y)" },
 		],
 	},
 	{
