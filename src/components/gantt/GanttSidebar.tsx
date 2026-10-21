@@ -19,6 +19,7 @@ export default function GanttSidebar() {
 		viewportDateRef,
 		displayProject,
 		viewLevel,
+		focusGroup,
 	} = useGantt();
 
 	const [editingId, setEditingId] = useState<string | null>(null);
@@ -318,7 +319,14 @@ export default function GanttSidebar() {
 										const hasTasks = displayProject.workItems.some(
 											(wi) => wi.workstreamId === ws.id,
 										);
-										const lane = hasTasks ? band.span : 0;
+										// Drilled into a project, rows don't match the
+										// full chart, so let the packer place it.
+										const lane =
+											focusGroup !== null
+												? undefined
+												: hasTasks
+													? band.span
+													: 0;
 										// Start the task near the left of the
 										// current viewport so it lands where
 										// the user is looking, not at today.

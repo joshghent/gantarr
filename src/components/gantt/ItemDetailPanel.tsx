@@ -3,18 +3,13 @@ import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { useGantt } from "#/lib/gantt-context";
+import { parsePeople } from "#/lib/capacity";
 import { listGroups } from "#/lib/rollup";
 import {
 	ArrowRight,
 	Trash2,
 	X,
 } from "lucide-react";
-
-/** Headcount from a form field; blank or zero means the task isn't counted. */
-export function parsePeople(value: string): number | undefined {
-	const n = Number(value);
-	return value.trim() !== "" && n > 0 ? n : undefined;
-}
 
 export default function ItemDetailPanel() {
 	const {

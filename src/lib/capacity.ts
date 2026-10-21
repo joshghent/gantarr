@@ -11,6 +11,12 @@ import { addDays, formatDate, getWorkingDays, parseDate } from "./dates";
 
 export type CapacityLevel = "under" | "at" | "over";
 
+/** Headcount from a form field; blank or zero means the task isn't counted. */
+export function parsePeople(value: string): number | undefined {
+	const n = Number(value);
+	return value.trim() !== "" && n > 0 ? n : undefined;
+}
+
 /** Engineers busy on each working day, keyed YYYY-MM-DD. Idle days are absent. */
 export function dailyLoad(project: GanttProject): Map<string, number> {
 	const load = new Map<string, number>();

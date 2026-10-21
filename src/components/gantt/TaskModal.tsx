@@ -10,8 +10,8 @@ import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { useGantt } from "#/lib/gantt-context";
+import { parsePeople } from "#/lib/capacity";
 import { listGroups } from "#/lib/rollup";
-import { parsePeople } from "./ItemDetailPanel";
 import { Trash2 } from "lucide-react";
 
 export default function TaskModal() {

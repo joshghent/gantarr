@@ -18,6 +18,7 @@ import {
 } from "#/lib/dates";
 import { useGantt } from "#/lib/gantt-context";
 import { buildLayout, getTaskRowIndex } from "#/lib/gantt-layout";
+import { updateWorkItem } from "#/lib/gantt-store";
 import { isRollupId } from "#/lib/rollup";
 import { getSprints, resolveSprints, sprintNumber } from "#/lib/sprints";
 import DependencyArrows from "./DependencyArrows";
@@ -45,10 +46,16 @@ export default function GanttChart() {
 		viewLevel,
 		setViewLevel,
 		setFocusGroup,
+		focusGroup,
 	} = useGantt();
 	// Roll-up levels draw summary bars, not tasks: nothing on them can be
 	// dragged, resized, linked or created.
 	const readOnly = viewLevel !== "detail";
+	// Drilled into one project, other projects' tasks are hidden, so row
+	// numbers here don't match the full chart. Edits then change dates
+	// only and leave rows to the packer, or tasks would land on top of
+	// hidden ones back in the full view.
+	const rowsAreLocal = focusGroup !== null;
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const [containerWidth, setContainerWidth] = useState(0);
 
@@ -383,7 +390,7 @@ export default function GanttChart() {
 			// boundary is crossed, so most mouse moves are free.
 			const snappedX = Math.round(rawDx / snapWidth) * snapWidth;
 			const snappedY =
-				dragState.type === "move"
+				dragState.type === "move" && !rowsAreLocal
 					? Math.round(rawDy / ROW_HEIGHT) * ROW_HEIGHT
 					: 0;
 
@@ -405,7 +412,7 @@ export default function GanttChart() {
 				didDrag,
 			});
 		},
-		[depDrag, dragState, snapWidth],
+		[depDrag, dragState, snapWidth, rowsAreLocal],
 	);
 
 	const handleMouseMove = useCallback(
@@ -468,6 +475,16 @@ export default function GanttChart() {
 				if (newStart > origEnd) newStart = origEnd;
 			}
 
+			if (rowsAreLocal) {
+				setProject(
+					updateWorkItem(project, item.id, {
+						startDate: formatDate(newStart),
+						endDate: formatDate(newEnd),
+					}),
+				);
+				return;
+			}
+
 			// If we didn't get an explicit target lane (horizontal-only
 			// move, or a resize), pin the dragged task to its current
 			// lane so the packer can't slide it elsewhere.
@@ -512,7 +529,7 @@ export default function GanttChart() {
 				updatedAt: new Date().toISOString(),
 			});
 		},
-		[snapWidth, snapDays, project, layout, setProject],
+		[snapWidth, snapDays, project, layout, setProject, rowsAreLocal],
 	);
 
 	const handleMouseUp = useCallback(
@@ -611,9 +628,16 @@ export default function GanttChart() {
 			const clickDate = getDateAtX(x);
 			const endDate = formatDate(addDays(parseDate(clickDate), 4));
 
-			addWorkItem(wsId, "New Task", clickDate, endDate, undefined, lane);
+			addWorkItem(
+				wsId,
+				"New Task",
+				clickDate,
+				endDate,
+				undefined,
+				rowsAreLocal ? undefined : lane,
+			);
 		},
-		[layout, getDateAtX, addWorkItem, readOnly],
+		[layout, getDateAtX, addWorkItem, readOnly, rowsAreLocal],
 	);
 
 	const handleItemClick = useCallback(

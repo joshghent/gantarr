@@ -5,6 +5,7 @@ import {
 	columnPeaks,
 	dailyLoad,
 	overCapacityPeriods,
+	parsePeople,
 } from "./capacity";
 import { parseDate } from "./dates";
 
@@ -65,6 +66,15 @@ describe("columnPeaks", () => {
 		);
 		const cols = [parseDate("2026-11-02"), parseDate("2026-11-09")];
 		expect(columnPeaks(load, cols, 7)).toEqual([4, 0]);
+	});
+});
+
+describe("parsePeople", () => {
+	it("treats blank, zero and junk as not counted", () => {
+		expect(parsePeople("")).toBeUndefined();
+		expect(parsePeople("0")).toBeUndefined();
+		expect(parsePeople("abc")).toBeUndefined();
+		expect(parsePeople("1.5")).toBe(1.5);
 	});
 });
 
