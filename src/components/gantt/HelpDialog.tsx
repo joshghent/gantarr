@@ -27,6 +27,7 @@ const SHORTCUT_GROUPS: {
 		rows: [
 			{ keys: ["D"], label: "Day view" },
 			{ keys: ["W"], label: "Week view" },
+			{ keys: ["S"], label: "Sprint view" },
 		],
 	},
 	{

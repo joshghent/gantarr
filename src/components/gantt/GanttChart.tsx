@@ -12,12 +12,16 @@ import {
 } from "#/lib/dates";
 import { useGantt } from "#/lib/gantt-context";
 import { buildLayout, getTaskRowIndex } from "#/lib/gantt-layout";
+import { getSprints, resolveSprints, sprintNumber } from "#/lib/sprints";
 import DependencyArrows from "./DependencyArrows";
 import { HEADER_HEIGHT, ROW_HEIGHT } from "./GanttSidebar";
 import WorkItemBar from "./WorkItemBar";
 
 const COL_WIDTH_DAY = 36;
 const COL_WIDTH_WEEK = 112; // 16px per day × 7 — keeps the math clean
+// Sprint view zooms further out: 10px per calendar day, so a two-week
+// sprint column is 140px.
+const DAY_WIDTH_SPRINT = 10;
 
 export default function GanttChart() {
 	const {
@@ -35,6 +39,16 @@ export default function GanttChart() {
 	const [containerWidth, setContainerWidth] = useState(0);
 
 	const layout = useMemo(() => buildLayout(project), [project]);
+
+	const sprints = useMemo(() => resolveSprints(project), [project]);
+	// Calendar days in one column. Day and week columns are fixed; a sprint
+	// column is however long the project's sprints are.
+	const daysPerColumn =
+		viewMode === "days"
+			? 1
+			: viewMode === "weeks"
+				? 7
+				: sprints.lengthWeeks * 7;
 
 	// Measure the scrollable container so we can extend the date range
 	// far enough that the chart always fills the viewport on initial
@@ -76,9 +90,18 @@ export default function GanttChart() {
 			end = addDays(maxDate, 30);
 		}
 
-		const colW = viewMode === "days" ? COL_WIDTH_DAY : COL_WIDTH_WEEK;
+		const colW =
+			viewMode === "days"
+				? COL_WIDTH_DAY
+				: viewMode === "weeks"
+					? COL_WIDTH_WEEK
+					: DAY_WIDTH_SPRINT * daysPerColumn;
 		const buildCols = (s: Date, e: Date) =>
-			viewMode === "weeks" ? getWeeks(s, e) : getDays(s, e);
+			viewMode === "weeks"
+				? getWeeks(s, e)
+				: viewMode === "sprints"
+					? getSprints(s, e, sprints)
+					: getDays(s, e);
 
 		let cols = buildCols(start, end);
 
@@ -96,17 +119,27 @@ export default function GanttChart() {
 
 		// Pin the chart origin to columns[0] so every pixel calculation
 		// agrees with what's actually rendered. In week view that's the
-		// Monday of the first week (getWeeks rounds to Monday); in day
-		// view it's the first day.
+		// Monday of the first week (getWeeks rounds to Monday); in sprint
+		// view the start of the first sprint; in day view the first day.
 		return { startDate: cols[0] ?? start, columns: cols };
-	}, [project.workItems, viewMode, containerWidth]);
+	}, [project.workItems, viewMode, containerWidth, sprints, daysPerColumn]);
 
-	const colWidth = viewMode === "days" ? COL_WIDTH_DAY : COL_WIDTH_WEEK;
+	const colWidth =
+		viewMode === "days"
+			? COL_WIDTH_DAY
+			: viewMode === "weeks"
+				? COL_WIDTH_WEEK
+				: DAY_WIDTH_SPRINT * daysPerColumn;
 	// One calendar day's pixel width. In day view a column IS a day,
-	// so they're equal. In week view a column is seven days, so days
-	// are a seventh the width. Both layouts then share a single
-	// positioning formula: `daysFromStart * dayWidth`.
-	const dayWidth = viewMode === "days" ? colWidth : colWidth / 7;
+	// so they're equal; otherwise a column holds `daysPerColumn` days.
+	// Every layout then shares a single positioning formula:
+	// `daysFromStart * dayWidth`.
+	const dayWidth = colWidth / daysPerColumn;
+	// Drag step. Week view moves whole weeks (bars fill week columns);
+	// day and sprint view move a day at a time — a sprint is far too
+	// coarse a step for planning inside it.
+	const snapWidth = viewMode === "weeks" ? colWidth : dayWidth;
+	const snapDays = viewMode === "weeks" ? 7 : 1;
 	const totalWidth = columns.length * colWidth;
 	const totalHeight = Math.max(layout.totalRows, 1) * ROW_HEIGHT;
 
@@ -323,7 +356,7 @@ export default function GanttChart() {
 			// (and row-by-row for move drags), matching the discrete
 			// nature of Gantt data. State only updates when the snap
 			// boundary is crossed, so most mouse moves are free.
-			const snappedX = Math.round(rawDx / colWidth) * colWidth;
+			const snappedX = Math.round(rawDx / snapWidth) * snapWidth;
 			const snappedY =
 				dragState.type === "move"
 					? Math.round(rawDy / ROW_HEIGHT) * ROW_HEIGHT
@@ -347,7 +380,7 @@ export default function GanttChart() {
 				didDrag,
 			});
 		},
-		[depDrag, dragState, colWidth],
+		[depDrag, dragState, snapWidth],
 	);
 
 	const handleMouseMove = useCallback(
@@ -369,7 +402,7 @@ export default function GanttChart() {
 		(d: NonNullable<typeof dragState>) => {
 			if (!d.didDrag) return;
 
-			const columnsMoved = Math.round(d.offsetX / colWidth);
+			const columnsMoved = Math.round(d.offsetX / snapWidth);
 			const rowsMoved = Math.round(d.offsetY / ROW_HEIGHT);
 			if (columnsMoved === 0 && rowsMoved === 0) return;
 
@@ -379,10 +412,7 @@ export default function GanttChart() {
 			const origStart = parseDate(d.originalStartDate);
 			const origEnd = parseDate(d.originalEndDate);
 
-			// Day view: 1 column = 1 calendar day. Week view: 1 column =
-			// 7 calendar days.
-			const daysPerColumn = viewMode === "weeks" ? 7 : 1;
-			const daysMoved = columnsMoved * daysPerColumn;
+			const daysMoved = columnsMoved * snapDays;
 
 			// Compute the new state for the dragged task.
 			let newStart = origStart;
@@ -457,7 +487,7 @@ export default function GanttChart() {
 				updatedAt: new Date().toISOString(),
 			});
 		},
-		[colWidth, viewMode, project, layout, setProject],
+		[snapWidth, snapDays, project, layout, setProject],
 	);
 
 	const handleMouseUp = useCallback(
@@ -644,15 +674,11 @@ export default function GanttChart() {
 					style={{ height: HEADER_HEIGHT / 2, top: HEADER_HEIGHT / 2 }}
 				>
 					{columns.map((col) => {
-						// In day view "today" is an exact-date match. In
-						// week view it's whichever week column contains
-						// today — the Monday in columns[i] covers that
-						// Monday through Sunday.
-						const now = new Date();
-						const isToday =
-							viewMode === "days"
-								? formatDate(col) === formatDate(now)
-								: now >= col && now <= addDays(col, 6);
+						// "Today" is whichever column contains today — an
+						// exact match in day view, otherwise the week or
+						// sprint that starts in columns[i].
+						const offset = daysBetween(col, new Date());
+						const isToday = offset >= 0 && offset < daysPerColumn;
 						const day = col.getDay();
 						const isWeekend = viewMode === "days" && (day === 0 || day === 6);
 						return (
@@ -672,6 +698,8 @@ export default function GanttChart() {
 										<span>{formatDayName(col)}</span>
 										<span className="font-medium">{col.getDate()}</span>
 									</>
+								) : viewMode === "sprints" ? (
+									<SprintLabel n={sprintNumber(col, sprints)} date={col} />
 								) : (
 									<span>{formatShortDate(col)}</span>
 								)}
@@ -814,10 +842,10 @@ export default function GanttChart() {
 								x += dragState.offsetX;
 								y += dragState.offsetY;
 							} else if (dragState.type === "resize-end") {
-								width = Math.max(colWidth, width + dragState.offsetX);
+								width = Math.max(snapWidth, width + dragState.offsetX);
 							} else if (dragState.type === "resize-start") {
 								x += dragState.offsetX;
-								width = Math.max(colWidth, width - dragState.offsetX);
+								width = Math.max(snapWidth, width - dragState.offsetX);
 							}
 						}
 
@@ -842,5 +870,17 @@ export default function GanttChart() {
 				</div>
 			</div>
 		</div>
+	);
+}
+
+/** Sprint column header: "Sprint 14" over the date it starts. */
+function SprintLabel({ n, date }: { n: number; date: Date }) {
+	return (
+		<>
+			<span className="font-display font-semibold">
+				{n > 0 ? `Sprint ${n}` : "Pre-sprint"}
+			</span>
+			<span>{formatShortDate(date)}</span>
+		</>
 	);
 }

@@ -249,6 +249,11 @@ function GanttEditorInner() {
 				setViewMode("weeks");
 				return;
 			}
+			if (e.key === "s" || e.key === "S") {
+				e.preventDefault();
+				setViewMode("sprints");
+				return;
+			}
 			if (e.key === "n" || e.key === "N") {
 				e.preventDefault();
 				addWorkstream("New Workstream");

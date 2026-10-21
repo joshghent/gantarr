@@ -1,5 +1,6 @@
 import {
 	Download,
+	Settings2,
 	FileDown,
 	FileUp,
 	Github,
@@ -11,8 +12,14 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "#/components/ui/popover";
 import { downloadJson, exportPdf, exportPng, loadJson } from "#/lib/export";
 import { useGantt } from "#/lib/gantt-context";
+import { resolveSprints } from "#/lib/sprints";
 
 // Injected at build time by Vite's `define` (see vite.config.ts). Declared
 // here because tsc's include globs don't pick up the ambient in env.d.ts.
@@ -151,32 +158,16 @@ export default function GanttToolbar({
 
 			<div className="mx-1.5 h-5 w-px bg-border/60" />
 
-			<div className="flex items-center rounded-md border border-border bg-muted/40">
-				<button
-					type="button"
-					className={`px-3 py-1 font-display text-[11px] font-semibold tracking-tight transition-colors ${
-						viewMode === "days"
-							? "bg-primary text-primary-foreground shadow-sm"
-							: "text-muted-foreground hover:text-foreground"
-					} rounded-l-md`}
-					onClick={() => setViewMode("days")}
-					title="Day view (D)"
-				>
-					Days
-				</button>
-				<button
-					type="button"
-					className={`px-3 py-1 font-display text-[11px] font-semibold tracking-tight transition-colors ${
-						viewMode === "weeks"
-							? "bg-primary text-primary-foreground shadow-sm"
-							: "text-muted-foreground hover:text-foreground"
-					} rounded-r-md`}
-					onClick={() => setViewMode("weeks")}
-					title="Week view (W)"
-				>
-					Weeks
-				</button>
-			</div>
+			<Segmented
+				value={viewMode}
+				onChange={setViewMode}
+				options={[
+					{ value: "days", label: "Days", title: "Day view (D)" },
+					{ value: "weeks", label: "Weeks", title: "Week view (W)" },
+					{ value: "sprints", label: "Sprints", title: "Sprint view (S)" },
+				]}
+			/>
+			{viewMode === "sprints" && <SprintSettingsButton />}
 
 			<div className="ml-auto flex items-center gap-1">
 				<Button
@@ -268,5 +259,94 @@ export default function GanttToolbar({
 				</span>
 			</div>
 		</div>
+	);
+}
+
+/** Toolbar pill group where exactly one option is active. */
+export function Segmented<T extends string>({
+	value,
+	onChange,
+	options,
+}: {
+	value: T;
+	onChange: (value: T) => void;
+	options: { value: T; label: string; title: string }[];
+}) {
+	return (
+		<div className="flex items-center rounded-md border border-border bg-muted/40">
+			{options.map((opt, i) => (
+				<button
+					key={opt.value}
+					type="button"
+					className={`px-3 py-1 font-display text-[11px] font-semibold tracking-tight transition-colors ${
+						value === opt.value
+							? "bg-primary text-primary-foreground shadow-sm"
+							: "text-muted-foreground hover:text-foreground"
+					} ${i === 0 ? "rounded-l-md" : ""} ${
+						i === options.length - 1 ? "rounded-r-md" : ""
+					}`}
+					onClick={() => onChange(opt.value)}
+					title={opt.title}
+				>
+					{opt.label}
+				</button>
+			))}
+		</div>
+	);
+}
+
+/** Sprint length and the day sprint 1 starts, saved with the project. */
+function SprintSettingsButton() {
+	const { project, setProject } = useGantt();
+	const sprints = resolveSprints(project);
+
+	const update = (changes: Partial<typeof sprints>) => {
+		setProject({
+			...project,
+			sprints: { ...sprints, ...changes },
+			updatedAt: new Date().toISOString(),
+		});
+	};
+
+	return (
+		<Popover>
+			<PopoverTrigger asChild>
+				<button
+					type="button"
+					className="flex h-7 items-center gap-1 rounded-md px-2 font-display text-[11px] font-semibold tracking-tight text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					title="Sprint settings"
+				>
+					<Settings2 className="h-3.5 w-3.5" />
+					{sprints.lengthWeeks}w
+				</button>
+			</PopoverTrigger>
+			<PopoverContent align="start" className="w-60 space-y-3 p-3">
+				<div>
+					<p className="mb-1.5 text-xs font-medium">Sprint length</p>
+					<Segmented
+						value={String(sprints.lengthWeeks)}
+						onChange={(v) => update({ lengthWeeks: Number(v) })}
+						options={[1, 2, 3, 4].map((w) => ({
+							value: String(w),
+							label: `${w}w`,
+							title: `${w} week${w > 1 ? "s" : ""}`,
+						}))}
+					/>
+				</div>
+				<label className="block">
+					<span className="mb-1.5 block text-xs font-medium">
+						Sprint 1 starts
+					</span>
+					<Input
+						type="date"
+						value={sprints.startDate}
+						onChange={(e) => {
+							if (e.target.value) update({ startDate: e.target.value });
+						}}
+						className="h-8 text-xs"
+					/>
+				</label>
+			</PopoverContent>
+		</Popover>
 	);
 }
