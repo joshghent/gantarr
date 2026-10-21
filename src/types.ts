@@ -18,6 +18,14 @@ export interface WorkItem {
 	 * for legacy projects loaded from JSON so they keep packing.
 	 */
 	lane?: number;
+	/**
+	 * Name of the headline project this task belongs to. Tasks sharing a
+	 * group (within a workstream) roll up into one bar in the Projects and
+	 * Workstreams views, and the group is what you drill into.
+	 */
+	group?: string;
+	/** Engineers this task occupies, counted against the team's capacity. */
+	people?: number;
 }
 
 export interface Dependency {
@@ -33,6 +41,13 @@ export interface Workstream {
 	color: string; // hex color used for the side band and default task color
 }
 
+export interface SprintSettings {
+	/** Sprint length in weeks. */
+	lengthWeeks: number;
+	/** First day of sprint 1, YYYY-MM-DD. */
+	startDate: string;
+}
+
 export interface GanttProject {
 	id: string;
 	name: string;
@@ -40,8 +55,17 @@ export interface GanttProject {
 	workItems: WorkItem[];
 	dependencies: Dependency[];
 	legend: LegendEntry[];
+	sprints?: SprintSettings;
+	/** Engineers available at once. Unset turns capacity tracking off. */
+	teamSize?: number;
 	createdAt: string;
 	updatedAt: string;
 }
 
-export type ViewMode = "days" | "weeks";
+export type ViewMode = "days" | "weeks" | "sprints";
+
+/**
+ * How much detail the chart shows: every task, one bar per headline
+ * project, or one bar per stretch of work in each workstream.
+ */
+export type ViewLevel = "detail" | "projects" | "workstreams";

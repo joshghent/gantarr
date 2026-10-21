@@ -3,6 +3,8 @@ import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { useGantt } from "#/lib/gantt-context";
+import { parsePeople } from "#/lib/capacity";
+import { listGroups } from "#/lib/rollup";
 import {
 	ArrowRight,
 	Trash2,
@@ -25,10 +27,14 @@ export default function ItemDetailPanel() {
 	const [startDate, setStartDate] = useState("");
 	const [endDate, setEndDate] = useState("");
 	const [legendEntryId, setLegendEntryId] = useState<string | null>(null);
+	const [group, setGroup] = useState("");
+	const [people, setPeople] = useState("");
 
 	useEffect(() => {
 		if (item) {
 			setTitle(item.title);
+			setGroup(item.group ?? "");
+			setPeople(item.people ? String(item.people) : "");
 			setStartDate(item.startDate);
 			setEndDate(item.endDate);
 			setLegendEntryId(item.legendEntryId);
@@ -43,6 +49,8 @@ export default function ItemDetailPanel() {
 			startDate,
 			endDate,
 			legendEntryId,
+			group: group.trim() || undefined,
+			people: parsePeople(people),
 		});
 	};
 
@@ -79,6 +87,49 @@ export default function ItemDetailPanel() {
 						onKeyDown={(e) => {
 							if (e.key === "Enter") commitChanges();
 						}}
+						className="mt-1 h-8 text-sm"
+					/>
+				</div>
+
+				<div>
+					<Label htmlFor="item-group" className="text-xs">
+						Project
+					</Label>
+					<Input
+						id="item-group"
+						value={group}
+						onChange={(e) => setGroup(e.target.value)}
+						onBlur={commitChanges}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") commitChanges();
+						}}
+						placeholder="None"
+						list="item-group-options"
+						className="mt-1 h-8 text-sm"
+					/>
+					<datalist id="item-group-options">
+						{listGroups(project).map((g) => (
+							<option key={g} value={g} />
+						))}
+					</datalist>
+				</div>
+
+				<div>
+					<Label htmlFor="item-people" className="text-xs">
+						Engineers
+					</Label>
+					<Input
+						id="item-people"
+						type="number"
+						min={0}
+						step={0.5}
+						value={people}
+						onChange={(e) => setPeople(e.target.value)}
+						onBlur={commitChanges}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") commitChanges();
+						}}
+						placeholder="Not counted"
 						className="mt-1 h-8 text-sm"
 					/>
 				</div>

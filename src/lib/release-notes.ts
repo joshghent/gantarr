@@ -12,6 +12,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
 	{
+		version: "2026-10-21-levels-sprints-capacity",
+		date: "2026-10-21",
+		title: "Stakeholder views, sprints and team capacity",
+		items: [
+			"Give tasks a Project, then switch to Projects (2) for one bar per project, or Workstreams (3) for a headline view with one bar per stretch of work. Double-click a project bar to open just its tasks.",
+			"New Sprints view (S): columns are numbered sprints. Set the sprint length and when sprint 1 starts from the toolbar.",
+			"Set your team size and how many engineers each task needs. Gantarr marks the weeks that are overbooked and warns you in the toolbar.",
+			"Dependency arrows between back-to-back tasks no longer leave their arrowhead hanging off the line.",
+		],
+	},
+	{
 		version: "2026-09-10-labels-inside-bars",
 		date: "2026-09-10",
 		title: "Task titles stay in their bars",

@@ -59,6 +59,7 @@ from a self-contained link — no data is stored on a server.
 \`\`\`jsonc
 {
   "name": "Q1 Launch",                 // required
+  "teamSize": 5,                        // optional; engineers available at once
   "workstreams": [                      // required, at least one
     {
       "label": "Engineering",           // required
@@ -69,7 +70,10 @@ from a self-contained link — no data is stored on a server.
           "start": "2026-01-05",        // required, YYYY-MM-DD
           "end": "2026-01-16",          // required, YYYY-MM-DD, must be >= start
           "type": "Development",        // optional legend category (auto-created)
-          "lane": 0                      // optional explicit row within the workstream
+          "lane": 0,                     // optional explicit row within the workstream
+          "project": "Public API",       // optional headline project; tasks sharing one
+                                         //   roll up into a single bar in summary views
+          "people": 2                    // optional engineers needed, checked against teamSize
         }
       ]
     }
@@ -89,10 +93,13 @@ A GanttProject is the wire format the app stores:
 
 - \`id\`, \`name\`, \`createdAt\`, \`updatedAt\`
 - \`workstreams[]\`: \`{ id, label, order, color }\`
-- \`workItems[]\`:  \`{ id, workstreamId, title, startDate, endDate, legendEntryId, order, lane? }\`
-  (\`startDate\`/\`endDate\` are YYYY-MM-DD; \`legendEntryId\` is null or a legend id)
+- \`workItems[]\`:  \`{ id, workstreamId, title, startDate, endDate, legendEntryId, order, lane?, group?, people? }\`
+  (\`startDate\`/\`endDate\` are YYYY-MM-DD; \`legendEntryId\` is null or a legend id;
+  \`group\` is the task's headline project; \`people\` the engineers it needs)
 - \`dependencies[]\`: \`{ id, fromItemId, toItemId }\`
 - \`legend[]\`: \`{ id, label, color }\`
+- optional \`teamSize\` (engineers available) and \`sprints\`:
+  \`{ lengthWeeks, startDate }\` (sprint 1's first day)
 
 Prefer the friendly chart input + \`create_gantt_chart\`; it fills in ids,
 ordering, colors, and legend resolution for you.
@@ -100,7 +107,9 @@ ordering, colors, and legend resolution for you.
 ## Tips
 - Dates are calendar dates; the chart treats Mon–Fri as working days.
 - Keep titles unique if you use dependencies — they're matched by title.
-- Reuse a small set of legend categories for a clean, readable chart.`;
+- Reuse a small set of legend categories for a clean, readable chart.
+- Group related tasks under a \`project\` so stakeholders can switch to the
+  Projects or Workstreams view and see just the headlines.`;
 
 /**
  * The /llms.txt body for a given deployment. Combines the static authoring

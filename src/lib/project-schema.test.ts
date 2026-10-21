@@ -115,6 +115,21 @@ describe("buildProject", () => {
 		expect(frontend?.lane).toBeUndefined();
 	});
 
+	it("maps a task's project and headcount, and the team size", () => {
+		const input = baseInput();
+		input.teamSize = 5;
+		input.workstreams[0].tasks[0].project = "Public API";
+		input.workstreams[0].tasks[0].people = 2;
+		const project = buildProject(input);
+		const api = project.workItems.find((i) => i.title === "API");
+		const frontend = project.workItems.find((i) => i.title === "Frontend");
+		expect(project.teamSize).toBe(5);
+		expect(api?.group).toBe("Public API");
+		expect(api?.people).toBe(2);
+		expect(frontend?.group).toBeUndefined();
+		expect(frontend?.people).toBeUndefined();
+	});
+
 	it("resolves dependencies by task title into work item ids", () => {
 		const input = baseInput();
 		input.dependencies = [{ from: "API", to: "Frontend" }];
@@ -188,6 +203,22 @@ describe("parseProject", () => {
 		const broken = JSON.parse(JSON.stringify(project));
 		broken.workItems[0].startDate = "not-a-date";
 		expect(() => parseProject(broken)).toThrow();
+	});
+
+	it("keeps project, headcount, sprint and team settings when re-parsed", () => {
+		const project = buildProject(baseInput());
+		project.workItems[0].group = "Public API";
+		project.workItems[0].people = 1.5;
+		project.teamSize = 4;
+		project.sprints = { lengthWeeks: 2, startDate: "2026-01-05" };
+		const reparsed = parseProject(JSON.parse(JSON.stringify(project)));
+		expect(reparsed.workItems[0].group).toBe("Public API");
+		expect(reparsed.workItems[0].people).toBe(1.5);
+		expect(reparsed.teamSize).toBe(4);
+		expect(reparsed.sprints).toEqual({
+			lengthWeeks: 2,
+			startDate: "2026-01-05",
+		});
 	});
 
 	it("preserves an optional lane on a work item", () => {

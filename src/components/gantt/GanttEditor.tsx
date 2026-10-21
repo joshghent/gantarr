@@ -8,6 +8,7 @@ import {
 	RELEASE_SEEN_KEY,
 } from "#/lib/release-notes";
 import { useImportFromUrl } from "#/lib/use-import-from-url";
+import FocusBar from "./FocusBar";
 import GanttChart from "./GanttChart";
 import GanttSidebar from "./GanttSidebar";
 import GanttToolbar from "./GanttToolbar";
@@ -25,6 +26,7 @@ function GanttEditorInner() {
 		setSelectedItemId,
 		deleteWorkItem,
 		setViewMode,
+		setViewLevel,
 		addWorkstream,
 		setProject,
 		isDirty,
@@ -33,6 +35,8 @@ function GanttEditorInner() {
 		redo,
 		editingItemId,
 		modalItemId,
+		focusGroup,
+		setFocusGroup,
 	} = useGantt();
 
 	const [helpOpen, setHelpOpen] = useState(false);
@@ -213,6 +217,10 @@ function GanttEditorInner() {
 				}
 				if (!editable && selectedItemId) {
 					setSelectedItemId(null);
+					return;
+				}
+				if (!editable && focusGroup !== null) {
+					setFocusGroup(null);
 				}
 				return;
 			}
@@ -249,6 +257,19 @@ function GanttEditorInner() {
 				setViewMode("weeks");
 				return;
 			}
+			if (e.key === "s" || e.key === "S") {
+				e.preventDefault();
+				setViewMode("sprints");
+				return;
+			}
+			const level = (
+				{ "1": "detail", "2": "projects", "3": "workstreams" } as const
+			)[e.key as "1" | "2" | "3"];
+			if (level) {
+				e.preventDefault();
+				setViewLevel(level);
+				return;
+			}
 			if (e.key === "n" || e.key === "N") {
 				e.preventDefault();
 				addWorkstream("New Workstream");
@@ -263,6 +284,7 @@ function GanttEditorInner() {
 		setSelectedItemId,
 		deleteWorkItem,
 		setViewMode,
+		setViewLevel,
 		addWorkstream,
 		project,
 		markClean,
@@ -272,6 +294,8 @@ function GanttEditorInner() {
 		helpOpen,
 		editingItemId,
 		modalItemId,
+		focusGroup,
+		setFocusGroup,
 	]);
 
 	return (
@@ -281,6 +305,7 @@ function GanttEditorInner() {
 				onOpenHelp={() => setHelpOpen(true)}
 				onOpenWhatsNew={() => setReleaseOpen(true)}
 			/>
+			<FocusBar />
 			<div className="relative flex flex-1 overflow-hidden">
 				<div
 					ref={chartRef}

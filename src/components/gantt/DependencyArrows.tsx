@@ -3,13 +3,50 @@ import { useGantt } from "#/lib/gantt-context";
 import type { GanttLayout } from "#/lib/gantt-layout";
 import { getTaskRowIndex } from "#/lib/gantt-layout";
 
+/** Straight run out of the source task before the curve begins. */
+const LEAD_OUT = 8;
 /**
- * Build the arrow path from a task's right edge to a successor's left edge.
- * A single cubic Bézier handles every case: for forward dependencies the
- * control points stretch with the horizontal gap; for adjacent or backward
- * ones (a task that ends where the next begins) we keep a small fixed reach
- * so the curve makes a tidy S instead of the sharp orthogonal spikes the
- * old elbow routing produced.
+ * Straight run into the target task. Must be longer than the arrowhead so
+ * the head always sits on a straight segment — otherwise, when the curve is
+ * mostly vertical (adjacent tasks several rows apart), the head points
+ * sideways off the end of a line that is still bending into place.
+ */
+const LEAD_IN = 14;
+const ARROWHEAD_LENGTH = 10;
+
+/**
+ * A same-row successor that starts at or after the source ends needs no
+ * curve — routing it through the leads would loop back on itself.
+ */
+function isStraight(fromX: number, fromY: number, toX: number, toY: number) {
+	return fromY === toY && toX >= fromX;
+}
+
+/** Control points of the curved middle section, between the two leads. */
+function arrowCurve(fromX: number, fromY: number, toX: number, toY: number) {
+	const x0 = fromX + LEAD_OUT;
+	const x3 = toX - LEAD_IN;
+	const dx = x3 - x0;
+	// Tight or backward arrows still need room to turn: the taller the
+	// arrow, the wider the S, so the bends stay soft instead of hooking.
+	const tightReach = Math.min(Math.max(Math.abs(toY - fromY) * 0.3, 22), 36);
+	const reach = dx > 24 ? Math.min(Math.max(dx * 0.4, 24), 80) : tightReach;
+	return {
+		p0: [x0, fromY],
+		p1: [x0 + reach, fromY],
+		p2: [x3 - reach, toY],
+		p3: [x3, toY],
+	} as const;
+}
+
+/**
+ * Build the arrow path from a task's right edge to a successor's left edge:
+ * a short straight lead out, a single cubic Bézier, then a straight lead in
+ * for the arrowhead. For forward dependencies the control points stretch
+ * with the horizontal gap; for adjacent or backward ones (a task that ends
+ * where the next begins) we keep a small fixed reach so the curve makes a
+ * tidy S instead of the sharp orthogonal spikes the old elbow routing
+ * produced.
  */
 export function arrowPath(
 	fromX: number,
@@ -17,13 +54,14 @@ export function arrowPath(
 	toX: number,
 	toY: number,
 ): string {
-	const dx = toX - fromX;
-	const reach = dx > 24 ? Math.min(Math.max(dx * 0.4, 24), 80) : 22;
-	return `M ${fromX} ${fromY} C ${fromX + reach} ${fromY}, ${toX - reach} ${toY}, ${toX} ${toY}`;
+	if (isStraight(fromX, fromY, toX, toY))
+		return `M ${fromX} ${fromY} L ${toX} ${toY}`;
+	const { p0, p1, p2, p3 } = arrowCurve(fromX, fromY, toX, toY);
+	return `M ${fromX} ${fromY} L ${p0[0]} ${p0[1]} C ${p1[0]} ${p1[1]}, ${p2[0]} ${p2[1]}, ${p3[0]} ${p3[1]} L ${toX} ${toY}`;
 }
 
 /**
- * Sample the cubic from `arrowPath` as a polyline, trimmed back from both
+ * Sample the path from `arrowPath` as a polyline, trimmed back from both
  * ends. The visible arrow is a click target (click to delete), and the two
  * places it passes over are exactly the places that need to stay grabbable:
  * the source task's connector port and the target task's left edge. Trimming
@@ -38,26 +76,28 @@ export function arrowHitPath(
 	trimStart = 18,
 	trimEnd = 12,
 ): string {
-	const dx = toX - fromX;
-	const reach = dx > 24 ? Math.min(Math.max(dx * 0.4, 24), 80) : 22;
-	const p0 = [fromX, fromY];
-	const p1 = [fromX + reach, fromY];
-	const p2 = [toX - reach, toY];
-	const p3 = [toX, toY];
-
 	const STEPS = 32;
 	const pts: [number, number][] = [];
-	for (let i = 0; i <= STEPS; i++) {
-		const t = i / STEPS;
-		const u = 1 - t;
-		const a = u * u * u;
-		const b = 3 * u * u * t;
-		const c = 3 * u * t * t;
-		const d = t * t * t;
-		pts.push([
-			a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0],
-			a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1],
-		]);
+	if (isStraight(fromX, fromY, toX, toY)) {
+		for (let i = 0; i <= STEPS; i++) {
+			pts.push([fromX + ((toX - fromX) * i) / STEPS, fromY]);
+		}
+	} else {
+		const { p0, p1, p2, p3 } = arrowCurve(fromX, fromY, toX, toY);
+		pts.push([fromX, fromY]);
+		for (let i = 0; i <= STEPS; i++) {
+			const t = i / STEPS;
+			const u = 1 - t;
+			const a = u * u * u;
+			const b = 3 * u * u * t;
+			const c = 3 * u * t * t;
+			const d = t * t * t;
+			pts.push([
+				a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0],
+				a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1],
+			]);
+		}
+		pts.push([toX, toY]);
 	}
 
 	// Cumulative arc length, so the trims are in pixels rather than in
@@ -99,7 +139,7 @@ export default function DependencyArrows({
 	layout,
 	interactive = true,
 }: DependencyArrowsProps) {
-	const { project, deleteDependency } = useGantt();
+	const { displayProject: project, deleteDependency } = useGantt();
 	const [hoveredId, setHoveredId] = useState<string | null>(null);
 
 	const arrows = useMemo(() => {
@@ -152,23 +192,25 @@ export default function DependencyArrows({
 			<defs>
 				<marker
 					id="arrowhead"
-					markerWidth="8"
-					markerHeight="6"
-					refX="8"
-					refY="3"
+					markerUnits="userSpaceOnUse"
+					markerWidth={ARROWHEAD_LENGTH}
+					markerHeight="8"
+					refX={ARROWHEAD_LENGTH}
+					refY="4"
 					orient="auto"
 				>
-					<polygon points="0 0, 8 3, 0 6" fill="#5a7a80" />
+					<polygon points={`0 0, ${ARROWHEAD_LENGTH} 4, 0 8`} fill="#5a7a80" />
 				</marker>
 				<marker
 					id="arrowhead-hover"
-					markerWidth="8"
-					markerHeight="6"
-					refX="8"
-					refY="3"
+					markerUnits="userSpaceOnUse"
+					markerWidth={ARROWHEAD_LENGTH}
+					markerHeight="8"
+					refX={ARROWHEAD_LENGTH}
+					refY="4"
 					orient="auto"
 				>
-					<polygon points="0 0, 8 3, 0 6" fill="#ef4444" />
+					<polygon points={`0 0, ${ARROWHEAD_LENGTH} 4, 0 8`} fill="#ef4444" />
 				</marker>
 			</defs>
 			{arrows.map((arrow) => {

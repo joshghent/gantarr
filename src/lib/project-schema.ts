@@ -46,6 +46,8 @@ const workItemSchema = z.object({
 	legendEntryId: z.string().nullable(),
 	order: z.number(),
 	lane: z.number().optional(),
+	group: z.string().optional(),
+	people: z.number().nonnegative().optional(),
 });
 
 const dependencySchema = z.object({
@@ -61,6 +63,10 @@ export const ganttProjectSchema = z.object({
 	workItems: z.array(workItemSchema),
 	dependencies: z.array(dependencySchema),
 	legend: z.array(legendEntrySchema),
+	sprints: z
+		.object({ lengthWeeks: z.number().int().positive(), startDate: isoDate })
+		.optional(),
+	teamSize: z.number().int().positive().optional(),
 	createdAt: z.string(),
 	updatedAt: z.string(),
 });
@@ -85,6 +91,8 @@ const taskInputSchema = z.object({
 	end: isoDate,
 	type: z.string().optional(),
 	lane: z.number().int().nonnegative().optional(),
+	project: z.string().min(1).optional(),
+	people: z.number().positive().optional(),
 });
 
 const workstreamInputSchema = z.object({
@@ -95,6 +103,7 @@ const workstreamInputSchema = z.object({
 
 export const chartInputSchema = z.object({
 	name: z.string().min(1),
+	teamSize: z.number().int().positive().optional(),
 	workstreams: z.array(workstreamInputSchema).min(1),
 	legend: z
 		.array(z.object({ label: z.string().min(1), color: z.string() }))
@@ -174,6 +183,8 @@ export function buildProject(rawInput: ChartInput): GanttProject {
 				legendEntryId: resolveLegend(task.type),
 				order: taskIndex,
 				...(task.lane !== undefined ? { lane: task.lane } : {}),
+				...(task.project !== undefined ? { group: task.project } : {}),
+				...(task.people !== undefined ? { people: task.people } : {}),
 			});
 			if (!itemIdByTitle.has(task.title)) itemIdByTitle.set(task.title, id);
 		});
@@ -196,6 +207,7 @@ export function buildProject(rawInput: ChartInput): GanttProject {
 		workItems,
 		dependencies,
 		legend,
+		...(input.teamSize !== undefined ? { teamSize: input.teamSize } : {}),
 		createdAt: now,
 		updatedAt: now,
 	};

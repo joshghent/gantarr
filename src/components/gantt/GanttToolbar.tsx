@@ -6,13 +6,23 @@ import {
 	HelpCircle,
 	Image,
 	Plus,
+	Settings2,
 	Sparkles,
+	Users,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "#/components/ui/popover";
+import { overCapacityPeriods } from "#/lib/capacity";
+import { formatShortDate, parseDate } from "#/lib/dates";
 import { downloadJson, exportPdf, exportPng, loadJson } from "#/lib/export";
 import { useGantt } from "#/lib/gantt-context";
+import { resolveSprints } from "#/lib/sprints";
 
 // Injected at build time by Vite's `define` (see vite.config.ts). Declared
 // here because tsc's include globs don't pick up the ambient in env.d.ts.
@@ -38,6 +48,8 @@ export default function GanttToolbar({
 		project,
 		viewMode,
 		setViewMode,
+		viewLevel,
+		setViewLevel,
 		setProject,
 		addWorkstream,
 		markClean,
@@ -151,32 +163,40 @@ export default function GanttToolbar({
 
 			<div className="mx-1.5 h-5 w-px bg-border/60" />
 
-			<div className="flex items-center rounded-md border border-border bg-muted/40">
-				<button
-					type="button"
-					className={`px-3 py-1 font-display text-[11px] font-semibold tracking-tight transition-colors ${
-						viewMode === "days"
-							? "bg-primary text-primary-foreground shadow-sm"
-							: "text-muted-foreground hover:text-foreground"
-					} rounded-l-md`}
-					onClick={() => setViewMode("days")}
-					title="Day view (D)"
-				>
-					Days
-				</button>
-				<button
-					type="button"
-					className={`px-3 py-1 font-display text-[11px] font-semibold tracking-tight transition-colors ${
-						viewMode === "weeks"
-							? "bg-primary text-primary-foreground shadow-sm"
-							: "text-muted-foreground hover:text-foreground"
-					} rounded-r-md`}
-					onClick={() => setViewMode("weeks")}
-					title="Week view (W)"
-				>
-					Weeks
-				</button>
-			</div>
+			<Segmented
+				value={viewMode}
+				onChange={setViewMode}
+				options={[
+					{ value: "days", label: "Days", title: "Day view (D)" },
+					{ value: "weeks", label: "Weeks", title: "Week view (W)" },
+					{ value: "sprints", label: "Sprints", title: "Sprint view (S)" },
+				]}
+			/>
+			{viewMode === "sprints" && <SprintSettingsButton />}
+
+			<div className="mx-1.5 h-5 w-px bg-border/60" />
+
+			<Segmented
+				value={viewLevel}
+				onChange={setViewLevel}
+				options={[
+					{ value: "detail", label: "Tasks", title: "Every task (1)" },
+					{
+						value: "projects",
+						label: "Projects",
+						title: "One bar per project (2)",
+					},
+					{
+						value: "workstreams",
+						label: "Workstreams",
+						title: "One bar per stretch of work in each workstream (3)",
+					},
+				]}
+			/>
+
+			<div className="mx-1.5 h-5 w-px bg-border/60" />
+
+			<TeamCapacityButton />
 
 			<div className="ml-auto flex items-center gap-1">
 				<Button
@@ -268,5 +288,210 @@ export default function GanttToolbar({
 				</span>
 			</div>
 		</div>
+	);
+}
+
+/** Toolbar pill group where exactly one option is active. */
+export function Segmented<T extends string>({
+	value,
+	onChange,
+	options,
+}: {
+	value: T;
+	onChange: (value: T) => void;
+	options: { value: T; label: string; title: string }[];
+}) {
+	return (
+		<div className="flex items-center rounded-md border border-border bg-muted/40">
+			{options.map((opt, i) => (
+				<button
+					key={opt.value}
+					type="button"
+					className={`px-3 py-1 font-display text-[11px] font-semibold tracking-tight transition-colors ${
+						value === opt.value
+							? "bg-primary text-primary-foreground shadow-sm"
+							: "text-muted-foreground hover:text-foreground"
+					} ${i === 0 ? "rounded-l-md" : ""} ${
+						i === options.length - 1 ? "rounded-r-md" : ""
+					}`}
+					onClick={() => onChange(opt.value)}
+					title={opt.title}
+				>
+					{opt.label}
+				</button>
+			))}
+		</div>
+	);
+}
+
+/** Sprint length and the day sprint 1 starts, saved with the project. */
+function SprintSettingsButton() {
+	const { project, setProject } = useGantt();
+	const sprints = resolveSprints(project);
+
+	const update = (changes: Partial<typeof sprints>) => {
+		setProject({
+			...project,
+			sprints: { ...sprints, ...changes },
+			updatedAt: new Date().toISOString(),
+		});
+	};
+
+	return (
+		<Popover>
+			<PopoverTrigger asChild>
+				<button
+					type="button"
+					className="flex h-7 items-center gap-1 rounded-md px-2 font-display text-[11px] font-semibold tracking-tight text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					title="Sprint settings"
+				>
+					<Settings2 className="h-3.5 w-3.5" />
+					{sprints.lengthWeeks}w
+				</button>
+			</PopoverTrigger>
+			<PopoverContent align="start" className="w-60 space-y-3 p-3">
+				<div>
+					<p className="mb-1.5 text-xs font-medium">Sprint length</p>
+					<Segmented
+						value={String(sprints.lengthWeeks)}
+						onChange={(v) => update({ lengthWeeks: Number(v) })}
+						options={[1, 2, 3, 4].map((w) => ({
+							value: String(w),
+							label: `${w}w`,
+							title: `${w} week${w > 1 ? "s" : ""}`,
+						}))}
+					/>
+				</div>
+				<div>
+					<label
+						htmlFor="sprint-start"
+						className="mb-1.5 block text-xs font-medium"
+					>
+						Sprint 1 starts
+					</label>
+					<Input
+						id="sprint-start"
+						type="date"
+						value={sprints.startDate}
+						onChange={(e) => {
+							if (e.target.value) update({ startDate: e.target.value });
+						}}
+						className="h-8 text-xs"
+					/>
+				</div>
+			</PopoverContent>
+		</Popover>
+	);
+}
+
+function formatPeriod(startDate: string, endDate: string): string {
+	const start = formatShortDate(parseDate(startDate));
+	return startDate === endDate
+		? start
+		: `${start} – ${formatShortDate(parseDate(endDate))}`;
+}
+
+/**
+ * Team size, and a standing warning whenever the plan needs more
+ * engineers at once than the team has.
+ */
+function TeamCapacityButton() {
+	const { project, setProject } = useGantt();
+	const teamSize = project.teamSize;
+	const over = overCapacityPeriods(project);
+	const [draft, setDraft] = useState(teamSize ? String(teamSize) : "");
+
+	useEffect(() => {
+		setDraft(teamSize ? String(teamSize) : "");
+	}, [teamSize]);
+
+	const commit = () => {
+		const n = Math.floor(Number(draft));
+		const next = draft.trim() === "" || !(n > 0) ? undefined : n;
+		if (next === teamSize) {
+			setDraft(teamSize ? String(teamSize) : "");
+			return;
+		}
+		setProject({
+			...project,
+			teamSize: next,
+			updatedAt: new Date().toISOString(),
+		});
+	};
+
+	return (
+		<Popover>
+			<PopoverTrigger asChild>
+				<button
+					type="button"
+					className={`flex h-7 items-center gap-1.5 rounded-md px-2 font-display text-[11px] font-semibold tracking-tight transition-colors ${
+						over.length > 0
+							? "bg-red-500/10 text-red-600 hover:bg-red-500/15"
+							: "text-muted-foreground hover:bg-accent hover:text-foreground"
+					}`}
+					title={
+						over.length > 0
+							? "More engineers needed than the team has"
+							: "Team capacity"
+					}
+				>
+					<Users className="h-3.5 w-3.5" />
+					{over.length > 0
+						? `Over capacity · ${formatShortDate(parseDate(over[0].startDate))}`
+						: teamSize
+							? `${teamSize} engineer${teamSize > 1 ? "s" : ""}`
+							: "Team"}
+				</button>
+			</PopoverTrigger>
+			<PopoverContent align="start" className="w-72 space-y-3 p-3">
+				<div>
+					<label
+						htmlFor="team-size"
+						className="mb-1.5 block text-xs font-medium"
+					>
+						Engineers on the team
+					</label>
+					<Input
+						id="team-size"
+						type="number"
+						min={1}
+						value={draft}
+						placeholder="Not tracking"
+						onChange={(e) => setDraft(e.target.value)}
+						onBlur={commit}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") commit();
+						}}
+						className="h-8 text-xs"
+					/>
+					<p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+						Set how many engineers each task needs in its details. Tasks without
+						a number don&apos;t count.
+					</p>
+				</div>
+				{over.length > 0 && (
+					<div>
+						<p className="mb-1 text-xs font-medium text-red-600">
+							Over capacity
+						</p>
+						<ul className="space-y-0.5 text-xs">
+							{over.slice(0, 6).map((p) => (
+								<li key={p.startDate} className="flex justify-between gap-2">
+									<span>{formatPeriod(p.startDate, p.endDate)}</span>
+									<span className="tabular-nums text-muted-foreground">
+										needs {p.peak} of {teamSize}
+									</span>
+								</li>
+							))}
+							{over.length > 6 && (
+								<li className="text-muted-foreground">
+									and {over.length - 6} more
+								</li>
+							)}
+						</ul>
+					</div>
+				)}
+			</PopoverContent>
+		</Popover>
 	);
 }
