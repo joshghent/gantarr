@@ -2,22 +2,33 @@ import { describe, expect, it } from "vitest";
 import { arrowHitPath, arrowPath } from "./DependencyArrows";
 
 describe("arrowPath", () => {
+	// Pull the straight segments out of the path: everything before the
+	// curve is the lead out, everything after it is the lead in.
+	const parts = (d: string) => {
+		const [lead, rest] = d.split(" C ");
+		const lastL = rest.lastIndexOf(" L ");
+		const curve = rest.slice(0, lastL);
+		const leadIn = rest.slice(lastL + 3);
+		const curveEnd = curve.split(", ").pop() ?? "";
+		return { lead, curve, curveEnd, leadIn };
+	};
+
 	// Regression: adjacent tasks (one ends exactly where the next begins)
 	// used to route through an orthogonal elbow that produced sharp
-	// "spikes". The path must now be a single smooth cubic — one M, one C,
-	// no L/Q segments that backtrack.
+	// "spikes". The middle must stay a single smooth cubic — no Q segments
+	// and only the two straight leads as L segments.
 	it("draws a clean cubic when tasks are adjacent (dx = 0)", () => {
 		const d = arrowPath(100, 20, 100, 64);
-		expect(d).toContain("M 100 20");
+		expect(d.startsWith("M 100 20")).toBe(true);
 		expect(d.match(/C/g)?.length).toBe(1);
-		expect(d).not.toContain("L");
+		expect(d.match(/L/g)?.length).toBe(2);
 		expect(d).not.toContain("Q");
 	});
 
 	it("draws a clean cubic for backward dependencies (dx < 0)", () => {
 		const d = arrowPath(200, 20, 120, 64);
 		expect(d.match(/C/g)?.length).toBe(1);
-		expect(d).not.toContain("L");
+		expect(d.match(/L/g)?.length).toBe(2);
 		expect(d).not.toContain("Q");
 	});
 
@@ -26,11 +37,32 @@ describe("arrowPath", () => {
 		expect(d.trim().endsWith("300 60")).toBe(true);
 	});
 
+	// Regression: on a tall, near-vertical arrow between adjacent tasks the
+	// curve was still bending in its last few pixels, so the straight
+	// arrowhead stuck out sideways, detached from the line.
+	it("finishes with a straight horizontal run longer than the arrowhead", () => {
+		const { curveEnd, leadIn } = parts(arrowPath(100, 20, 100, 220));
+		const [cx, cy] = curveEnd.split(" ").map(Number);
+		const [tx, ty] = leadIn.split(" ").map(Number);
+		expect(cy).toBe(ty);
+		expect(tx - cx).toBeGreaterThan(10);
+	});
+
+	it("leaves the source with a short straight run", () => {
+		const { lead } = parts(arrowPath(100, 20, 100, 220));
+		expect(lead).toMatch(/^M 100 20 L 1\d\d 20$/);
+	});
+
+	it("draws a straight line between close tasks on the same row", () => {
+		expect(arrowPath(100, 20, 104, 20)).toBe("M 100 20 L 104 20");
+	});
+
 	it("stretches the control reach with the forward gap but caps it", () => {
-		const near = arrowPath(0, 0, 100, 0); // dx 100 -> reach 40
-		expect(near).toContain("C 40 0");
-		const far = arrowPath(0, 0, 1000, 0); // dx 1000 -> reach capped at 80
-		expect(far).toContain("C 80 0");
+		// Curve runs from x=8 to the end minus the 14px lead in.
+		const near = arrowPath(0, 0, 122, 10); // curve dx 100 -> reach 40
+		expect(near).toContain("C 48 0");
+		const far = arrowPath(0, 0, 1000, 10); // reach capped at 80
+		expect(far).toContain("C 88 0");
 	});
 });
 
