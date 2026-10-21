@@ -10,6 +10,12 @@ import {
 	X,
 } from "lucide-react";
 
+/** Headcount from a form field; blank or zero means the task isn't counted. */
+export function parsePeople(value: string): number | undefined {
+	const n = Number(value);
+	return value.trim() !== "" && n > 0 ? n : undefined;
+}
+
 export default function ItemDetailPanel() {
 	const {
 		project,
@@ -27,11 +33,13 @@ export default function ItemDetailPanel() {
 	const [endDate, setEndDate] = useState("");
 	const [legendEntryId, setLegendEntryId] = useState<string | null>(null);
 	const [group, setGroup] = useState("");
+	const [people, setPeople] = useState("");
 
 	useEffect(() => {
 		if (item) {
 			setTitle(item.title);
 			setGroup(item.group ?? "");
+			setPeople(item.people ? String(item.people) : "");
 			setStartDate(item.startDate);
 			setEndDate(item.endDate);
 			setLegendEntryId(item.legendEntryId);
@@ -47,6 +55,7 @@ export default function ItemDetailPanel() {
 			endDate,
 			legendEntryId,
 			group: group.trim() || undefined,
+			people: parsePeople(people),
 		});
 	};
 
@@ -108,6 +117,26 @@ export default function ItemDetailPanel() {
 							<option key={g} value={g} />
 						))}
 					</datalist>
+				</div>
+
+				<div>
+					<Label htmlFor="item-people" className="text-xs">
+						Engineers
+					</Label>
+					<Input
+						id="item-people"
+						type="number"
+						min={0}
+						step={0.5}
+						value={people}
+						onChange={(e) => setPeople(e.target.value)}
+						onBlur={commitChanges}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") commitChanges();
+						}}
+						placeholder="Not counted"
+						className="mt-1 h-8 text-sm"
+					/>
 				</div>
 
 				<div className="grid grid-cols-2 gap-2">

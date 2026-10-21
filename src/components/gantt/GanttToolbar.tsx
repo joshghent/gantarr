@@ -1,13 +1,14 @@
 import {
 	Download,
-	Settings2,
 	FileDown,
 	FileUp,
 	Github,
 	HelpCircle,
 	Image,
 	Plus,
+	Settings2,
 	Sparkles,
+	Users,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "#/components/ui/button";
@@ -17,6 +18,8 @@ import {
 	PopoverContent,
 	PopoverTrigger,
 } from "#/components/ui/popover";
+import { overCapacityPeriods } from "#/lib/capacity";
+import { formatShortDate, parseDate } from "#/lib/dates";
 import { downloadJson, exportPdf, exportPng, loadJson } from "#/lib/export";
 import { useGantt } from "#/lib/gantt-context";
 import { resolveSprints } from "#/lib/sprints";
@@ -190,6 +193,10 @@ export default function GanttToolbar({
 					},
 				]}
 			/>
+
+			<div className="mx-1.5 h-5 w-px bg-border/60" />
+
+			<TeamCapacityButton />
 
 			<div className="ml-auto flex items-center gap-1">
 				<Button
@@ -372,6 +379,118 @@ function SprintSettingsButton() {
 						className="h-8 text-xs"
 					/>
 				</div>
+			</PopoverContent>
+		</Popover>
+	);
+}
+
+function formatPeriod(startDate: string, endDate: string): string {
+	const start = formatShortDate(parseDate(startDate));
+	return startDate === endDate
+		? start
+		: `${start} – ${formatShortDate(parseDate(endDate))}`;
+}
+
+/**
+ * Team size, and a standing warning whenever the plan needs more
+ * engineers at once than the team has.
+ */
+function TeamCapacityButton() {
+	const { project, setProject } = useGantt();
+	const teamSize = project.teamSize;
+	const over = overCapacityPeriods(project);
+	const [draft, setDraft] = useState(teamSize ? String(teamSize) : "");
+
+	useEffect(() => {
+		setDraft(teamSize ? String(teamSize) : "");
+	}, [teamSize]);
+
+	const commit = () => {
+		const n = Math.floor(Number(draft));
+		const next = draft.trim() === "" || !(n > 0) ? undefined : n;
+		if (next === teamSize) {
+			setDraft(teamSize ? String(teamSize) : "");
+			return;
+		}
+		setProject({
+			...project,
+			teamSize: next,
+			updatedAt: new Date().toISOString(),
+		});
+	};
+
+	return (
+		<Popover>
+			<PopoverTrigger asChild>
+				<button
+					type="button"
+					className={`flex h-7 items-center gap-1.5 rounded-md px-2 font-display text-[11px] font-semibold tracking-tight transition-colors ${
+						over.length > 0
+							? "bg-red-500/10 text-red-600 hover:bg-red-500/15"
+							: "text-muted-foreground hover:bg-accent hover:text-foreground"
+					}`}
+					title={
+						over.length > 0
+							? "More engineers needed than the team has"
+							: "Team capacity"
+					}
+				>
+					<Users className="h-3.5 w-3.5" />
+					{over.length > 0
+						? `Over capacity · ${formatShortDate(parseDate(over[0].startDate))}`
+						: teamSize
+							? `${teamSize} engineer${teamSize > 1 ? "s" : ""}`
+							: "Team"}
+				</button>
+			</PopoverTrigger>
+			<PopoverContent align="start" className="w-72 space-y-3 p-3">
+				<div>
+					<label
+						htmlFor="team-size"
+						className="mb-1.5 block text-xs font-medium"
+					>
+						Engineers on the team
+					</label>
+					<Input
+						id="team-size"
+						type="number"
+						min={1}
+						value={draft}
+						placeholder="Not tracking"
+						onChange={(e) => setDraft(e.target.value)}
+						onBlur={commit}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") commit();
+						}}
+						className="h-8 text-xs"
+					/>
+					<p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+						Set how many engineers each task needs in its details. Tasks without
+						a number don&apos;t count.
+					</p>
+				</div>
+				{over.length > 0 && (
+					<div>
+						<p className="mb-1 text-xs font-medium text-red-600">
+							Over capacity
+						</p>
+						<ul className="space-y-0.5 text-xs">
+							{over.slice(0, 6).map((p) => (
+								<li key={p.startDate} className="flex justify-between gap-2">
+									<span>{formatPeriod(p.startDate, p.endDate)}</span>
+									<span className="tabular-nums text-muted-foreground">
+										needs {p.peak} of {teamSize}
+									</span>
+								</li>
+							))}
+							{over.length > 6 && (
+								<li className="text-muted-foreground">
+									and {over.length - 6} more
+								</li>
+							)}
+						</ul>
+					</div>
+				)}
 			</PopoverContent>
 		</Popover>
 	);

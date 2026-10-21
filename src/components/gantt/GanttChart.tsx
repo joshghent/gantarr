@@ -1,5 +1,11 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+	type CapacityLevel,
+	capacityLevel,
+	columnPeaks,
+	dailyLoad,
+} from "#/lib/capacity";
+import {
 	addDays,
 	daysBetween,
 	formatDate,
@@ -149,6 +155,16 @@ export default function GanttChart() {
 	const snapWidth = viewMode === "weeks" ? colWidth : dayWidth;
 	const snapDays = viewMode === "weeks" ? 7 : 1;
 	const totalWidth = columns.length * colWidth;
+
+	// Busiest day's headcount in each column, against the team size. Always
+	// measured on the real tasks, whatever level the chart is drawn at.
+	const capacity = useMemo(() => {
+		const teamSize = project.teamSize;
+		if (!teamSize) return null;
+		return columnPeaks(dailyLoad(project), columns, daysPerColumn).map(
+			(peak) => ({ peak, level: capacityLevel(peak, teamSize) }),
+		);
+	}, [project, columns, daysPerColumn]);
 	const totalHeight = Math.max(layout.totalRows, 1) * ROW_HEIGHT;
 
 	// Get x position for a date — the left edge of its slot.
@@ -695,7 +711,8 @@ export default function GanttChart() {
 					className="sticky z-20 flex border-b border-border/70 bg-card/95 backdrop-blur-sm"
 					style={{ height: HEADER_HEIGHT / 2, top: HEADER_HEIGHT / 2 }}
 				>
-					{columns.map((col) => {
+					{columns.map((col, i) => {
+						const load = capacity?.[i];
 						// "Today" is whichever column contains today — an
 						// exact match in day view, otherwise the week or
 						// sprint that starts in columns[i].
@@ -706,7 +723,12 @@ export default function GanttChart() {
 						return (
 							<div
 								key={formatDate(col)}
-								className={`flex flex-col items-center justify-center overflow-hidden border-r border-border/40 text-[10px] leading-tight ${
+								title={
+									load && load.peak > 0
+										? `${load.peak} of ${project.teamSize} engineers busy at the peak`
+										: undefined
+								}
+								className={`relative flex flex-col items-center justify-center overflow-hidden border-r border-border/40 text-[10px] leading-tight ${
 									isToday
 										? "bg-primary/8 font-semibold text-primary"
 										: isWeekend
@@ -725,6 +747,7 @@ export default function GanttChart() {
 								) : (
 									<span>{formatShortDate(col)}</span>
 								)}
+								{load && load.peak > 0 && <CapacityMeter level={load.level} />}
 							</div>
 						);
 					})}
@@ -757,6 +780,25 @@ export default function GanttChart() {
 									/>
 								);
 							})}
+						</div>
+					)}
+
+					{/* Over-capacity tint — columns needing more engineers than
+					    the team has. Planning aid only, so kept out of exports. */}
+					{capacity && (
+						<div
+							data-no-export="true"
+							className="pointer-events-none absolute inset-0"
+						>
+							{capacity.map((c, i) =>
+								c.level === "over" ? (
+									<div
+										key={`over-${formatDate(columns[i])}`}
+										className="absolute top-0 bottom-0 bg-red-500/[0.08]"
+										style={{ left: i * colWidth, width: colWidth }}
+									/>
+								) : null,
+							)}
 						</div>
 					)}
 
@@ -907,5 +949,21 @@ function SprintLabel({ n, date }: { n: number; date: Date }) {
 			</span>
 			<span>{formatShortDate(date)}</span>
 		</>
+	);
+}
+
+/** Thin bar along the bottom of a header column showing its peak load. */
+function CapacityMeter({ level }: { level: CapacityLevel }) {
+	const color =
+		level === "over"
+			? "bg-red-500"
+			: level === "at"
+				? "bg-amber-400"
+				: "bg-foreground/15";
+	return (
+		<span
+			data-no-export="true"
+			className={`absolute inset-x-0 bottom-0 h-[3px] ${color}`}
+		/>
 	);
 }

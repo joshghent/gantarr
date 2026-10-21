@@ -11,6 +11,7 @@ import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { useGantt } from "#/lib/gantt-context";
 import { listGroups } from "#/lib/rollup";
+import { parsePeople } from "./ItemDetailPanel";
 import { Trash2 } from "lucide-react";
 
 export default function TaskModal() {
@@ -31,11 +32,13 @@ export default function TaskModal() {
 	const [workstreamId, setWorkstreamId] = useState("");
 	const [legendEntryId, setLegendEntryId] = useState<string | null>(null);
 	const [group, setGroup] = useState("");
+	const [people, setPeople] = useState("");
 
 	useEffect(() => {
 		if (item) {
 			setTitle(item.title);
 			setGroup(item.group ?? "");
+			setPeople(item.people ? String(item.people) : "");
 			setStartDate(item.startDate);
 			setEndDate(item.endDate);
 			setWorkstreamId(item.workstreamId);
@@ -54,6 +57,7 @@ export default function TaskModal() {
 			endDate: endDate < startDate ? startDate : endDate,
 			legendEntryId,
 			group: group.trim() || undefined,
+			people: parsePeople(people),
 		});
 		// If workstream changed, move it
 		if (workstreamId !== item.workstreamId) {
@@ -109,6 +113,23 @@ export default function TaskModal() {
 								<option key={g} value={g} />
 							))}
 						</datalist>
+					</div>
+
+					<div>
+						<Label htmlFor="task-people">Engineers</Label>
+						<Input
+							id="task-people"
+							type="number"
+							min={0}
+							step={0.5}
+							value={people}
+							onChange={(e) => setPeople(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") handleSave();
+							}}
+							placeholder="Not counted against team capacity"
+							className="mt-1"
+						/>
 					</div>
 
 					<div className="grid grid-cols-2 gap-3">
