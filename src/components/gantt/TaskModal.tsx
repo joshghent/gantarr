@@ -10,6 +10,7 @@ import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { useGantt } from "#/lib/gantt-context";
+import { listGroups } from "#/lib/rollup";
 import { Trash2 } from "lucide-react";
 
 export default function TaskModal() {
@@ -29,10 +30,12 @@ export default function TaskModal() {
 	const [endDate, setEndDate] = useState("");
 	const [workstreamId, setWorkstreamId] = useState("");
 	const [legendEntryId, setLegendEntryId] = useState<string | null>(null);
+	const [group, setGroup] = useState("");
 
 	useEffect(() => {
 		if (item) {
 			setTitle(item.title);
+			setGroup(item.group ?? "");
 			setStartDate(item.startDate);
 			setEndDate(item.endDate);
 			setWorkstreamId(item.workstreamId);
@@ -50,6 +53,7 @@ export default function TaskModal() {
 			startDate,
 			endDate: endDate < startDate ? startDate : endDate,
 			legendEntryId,
+			group: group.trim() || undefined,
 		});
 		// If workstream changed, move it
 		if (workstreamId !== item.workstreamId) {
@@ -85,6 +89,26 @@ export default function TaskModal() {
 							className="mt-1"
 							autoFocus
 						/>
+					</div>
+
+					<div>
+						<Label htmlFor="task-group">Project</Label>
+						<Input
+							id="task-group"
+							value={group}
+							onChange={(e) => setGroup(e.target.value)}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") handleSave();
+							}}
+							placeholder="None — tasks with the same project roll up together"
+							list="task-group-options"
+							className="mt-1"
+						/>
+						<datalist id="task-group-options">
+							{listGroups(project).map((g) => (
+								<option key={g} value={g} />
+							))}
+						</datalist>
 					</div>
 
 					<div className="grid grid-cols-2 gap-3">

@@ -139,7 +139,7 @@ export default function DependencyArrows({
 	layout,
 	interactive = true,
 }: DependencyArrowsProps) {
-	const { project, deleteDependency } = useGantt();
+	const { displayProject: project, deleteDependency } = useGantt();
 	const [hoveredId, setHoveredId] = useState<string | null>(null);
 
 	const arrows = useMemo(() => {

@@ -45,6 +45,8 @@ export default function GanttToolbar({
 		project,
 		viewMode,
 		setViewMode,
+		viewLevel,
+		setViewLevel,
 		setProject,
 		addWorkstream,
 		markClean,
@@ -168,6 +170,26 @@ export default function GanttToolbar({
 				]}
 			/>
 			{viewMode === "sprints" && <SprintSettingsButton />}
+
+			<div className="mx-1.5 h-5 w-px bg-border/60" />
+
+			<Segmented
+				value={viewLevel}
+				onChange={setViewLevel}
+				options={[
+					{ value: "detail", label: "Tasks", title: "Every task (1)" },
+					{
+						value: "projects",
+						label: "Projects",
+						title: "One bar per project (2)",
+					},
+					{
+						value: "workstreams",
+						label: "Workstreams",
+						title: "One bar per stretch of work in each workstream (3)",
+					},
+				]}
+			/>
 
 			<div className="ml-auto flex items-center gap-1">
 				<Button
@@ -333,11 +355,15 @@ function SprintSettingsButton() {
 						}))}
 					/>
 				</div>
-				<label className="block">
-					<span className="mb-1.5 block text-xs font-medium">
+				<div>
+					<label
+						htmlFor="sprint-start"
+						className="mb-1.5 block text-xs font-medium"
+					>
 						Sprint 1 starts
-					</span>
+					</label>
 					<Input
+						id="sprint-start"
 						type="date"
 						value={sprints.startDate}
 						onChange={(e) => {
@@ -345,7 +371,7 @@ function SprintSettingsButton() {
 						}}
 						className="h-8 text-xs"
 					/>
-				</label>
+				</div>
 			</PopoverContent>
 		</Popover>
 	);

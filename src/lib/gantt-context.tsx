@@ -5,23 +5,37 @@ import {
 	useCallback,
 	useContext,
 	useEffect,
+	useMemo,
 	useRef,
 	useState,
 } from "react";
 import type {
 	GanttProject,
 	LegendEntry,
+	ViewLevel,
 	ViewMode,
 	WorkItem,
 	Workstream,
 } from "../types";
 import * as store from "./gantt-store";
+import { buildDisplayProject } from "./rollup";
 
 interface GanttContextValue {
 	project: GanttProject;
 	viewMode: ViewMode;
 	setViewMode: (mode: ViewMode) => void;
 	setProject: (project: GanttProject) => void;
+
+	// Level of detail the chart shows, and the project being drilled into
+	// (detail level only). `displayProject` is what the chart, sidebar and
+	// arrows draw: `project` itself at the plain detail level, otherwise a
+	// rolled-up or filtered copy (see lib/rollup.ts). Edits always go to
+	// `project`.
+	viewLevel: ViewLevel;
+	setViewLevel: (level: ViewLevel) => void;
+	focusGroup: string | null;
+	setFocusGroup: (group: string | null) => void;
+	displayProject: GanttProject;
 
 	// Unsaved-changes tracking
 	isDirty: boolean;
@@ -106,11 +120,35 @@ export function GanttProvider({
 	const futureRef = useRef<GanttProject[]>([]);
 	const [historySize, setHistorySize] = useState({ past: 0, future: 0 });
 	const [viewMode, setViewMode] = useState<ViewMode>("days");
+	const [viewLevel, setViewLevelState] = useState<ViewLevel>("detail");
+	const [focusGroup, setFocusGroupState] = useState<string | null>(null);
 	const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 	const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
 	const [editingItemId, setEditingItemId] = useState<string | null>(null);
 	const [modalItemId, setModalItemId] = useState<string | null>(null);
 	const viewportDateRef = useRef<string | null>(null);
+
+	const displayProject = useMemo(
+		() => buildDisplayProject(project, viewLevel, focusGroup),
+		[project, viewLevel, focusGroup],
+	);
+
+	// Rolled-up bars aren't editable tasks, so changing level drops any
+	// selection or in-progress edit rather than leaving it pointing at a
+	// bar that's no longer drawn.
+	const setViewLevel = useCallback((level: ViewLevel) => {
+		setViewLevelState(level);
+		if (level !== "detail") setFocusGroupState(null);
+		setSelectedItemId(null);
+		setEditingItemId(null);
+	}, []);
+
+	const setFocusGroup = useCallback((group: string | null) => {
+		setFocusGroupState(group);
+		if (group !== null) setViewLevelState("detail");
+		setSelectedItemId(null);
+		setEditingItemId(null);
+	}, []);
 
 	// Dirty tracking — the default project that ships on first load stays
 	// "clean" because we never call any mutator on it. Only explicit user
@@ -210,8 +248,8 @@ export function GanttProvider({
 			legendEntryId?: string,
 			lane?: number,
 		) => {
-			mutate((p) =>
-				store.addWorkItem(
+			mutate((p) => {
+				const next = store.addWorkItem(
 					p,
 					workstreamId,
 					title,
@@ -219,10 +257,15 @@ export function GanttProvider({
 					endDate,
 					legendEntryId,
 					lane,
-				),
-			);
+				);
+				// While drilled into a project, new tasks join it — otherwise
+				// they'd vanish from the view they were just added to.
+				if (focusGroup === null) return next;
+				const added = next.workItems[next.workItems.length - 1];
+				return store.updateWorkItem(next, added.id, { group: focusGroup });
+			});
 		},
-		[mutate],
+		[mutate, focusGroup],
 	);
 
 	const updateWorkItem = useCallback(
@@ -308,6 +351,11 @@ export function GanttProvider({
 				viewMode,
 				setViewMode,
 				setProject,
+				viewLevel,
+				setViewLevel,
+				focusGroup,
+				setFocusGroup,
+				displayProject,
 				isDirty,
 				markClean,
 				undo,

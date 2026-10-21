@@ -28,6 +28,9 @@ const SHORTCUT_GROUPS: {
 			{ keys: ["D"], label: "Day view" },
 			{ keys: ["W"], label: "Week view" },
 			{ keys: ["S"], label: "Sprint view" },
+			{ keys: ["1"], label: "Show every task" },
+			{ keys: ["2"], label: "Show one bar per project" },
+			{ keys: ["3"], label: "Show one bar per workstream stretch" },
 		],
 	},
 	{
@@ -48,6 +51,7 @@ const TIPS: string[] = [
 	"Drag a task to move, drag its edges to resize.",
 	"Drag the dot on a task's right edge to draw a dependency arrow.",
 	"Click a dependency arrow to remove it.",
+	"Give tasks a Project to roll them up in the Projects and Workstreams views; double-click a project bar to open just its tasks.",
 	"Click the project name in the toolbar to rename it.",
 	"Drop a .gantarr.json file anywhere on the page to load it.",
 ];

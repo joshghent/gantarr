@@ -17,6 +17,8 @@ export default function GanttSidebar() {
 		addWorkItem,
 		setProject,
 		viewportDateRef,
+		displayProject,
+		viewLevel,
 	} = useGantt();
 
 	const [editingId, setEditingId] = useState<string | null>(null);
@@ -70,8 +72,16 @@ export default function GanttSidebar() {
 		};
 	}, []);
 
-	const layout = buildLayout(project);
+	// Rows follow what the chart is drawing, which may be rolled up or
+	// drilled into a single project.
+	const layout = buildLayout(displayProject);
 	const sortedWs = [...project.workstreams].sort((a, b) => a.order - b.order);
+	// Reordering maps band positions back onto every workstream, so it only
+	// works while every workstream is on screen (not drilled into one
+	// project). Adding tasks is for the task-level view.
+	const canReorder =
+		displayProject.workstreams.length === project.workstreams.length;
+	const canAddTasks = viewLevel === "detail";
 
 	const startEdit = (id: string, currentLabel: string) => {
 		setEditingId(id);
@@ -239,7 +249,7 @@ export default function GanttSidebar() {
 							    it gets the full vertical space. */}
 							<div
 								data-no-export="true"
-								className="flex w-5 flex-shrink-0 cursor-grab items-center justify-center text-white/60 transition-colors hover:bg-white/15 hover:text-white active:cursor-grabbing"
+								className={`flex w-5 flex-shrink-0 ${canReorder ? "cursor-grab" : "pointer-events-none opacity-0"} items-center justify-center text-white/60 transition-colors hover:bg-white/15 hover:text-white active:cursor-grabbing`}
 								onMouseDown={(e) => handleGripMouseDown(e, ws.id)}
 								title="Drag to reorder"
 							>
@@ -294,6 +304,7 @@ export default function GanttSidebar() {
 								data-no-export="true"
 								className="pointer-events-none absolute right-1 top-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100"
 							>
+								{canAddTasks && (
 								<button
 									type="button"
 									onClick={(e) => {
@@ -304,7 +315,7 @@ export default function GanttSidebar() {
 										// Empty workstreams have band.span=1
 										// but zero real tasks, so drop back
 										// to lane 0 in that case.
-										const hasTasks = project.workItems.some(
+										const hasTasks = displayProject.workItems.some(
 											(wi) => wi.workstreamId === ws.id,
 										);
 										const lane = hasTasks ? band.span : 0;
@@ -327,6 +338,7 @@ export default function GanttSidebar() {
 									<Plus className="h-3 w-3" />
 									Task
 								</button>
+								)}
 								<button
 									type="button"
 									onClick={(e) => {

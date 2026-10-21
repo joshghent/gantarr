@@ -12,6 +12,7 @@ import {
 } from "#/lib/dates";
 import { useGantt } from "#/lib/gantt-context";
 import { buildLayout, getTaskRowIndex } from "#/lib/gantt-layout";
+import { isRollupId } from "#/lib/rollup";
 import { getSprints, resolveSprints, sprintNumber } from "#/lib/sprints";
 import DependencyArrows from "./DependencyArrows";
 import { HEADER_HEIGHT, ROW_HEIGHT } from "./GanttSidebar";
@@ -34,11 +35,18 @@ export default function GanttChart() {
 		setModalItemId,
 		setProject,
 		viewportDateRef,
+		displayProject,
+		viewLevel,
+		setViewLevel,
+		setFocusGroup,
 	} = useGantt();
+	// Roll-up levels draw summary bars, not tasks: nothing on them can be
+	// dragged, resized, linked or created.
+	const readOnly = viewLevel !== "detail";
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const [containerWidth, setContainerWidth] = useState(0);
 
-	const layout = useMemo(() => buildLayout(project), [project]);
+	const layout = useMemo(() => buildLayout(displayProject), [displayProject]);
 
 	const sprints = useMemo(() => resolveSprints(project), [project]);
 	// Calendar days in one column. Day and week columns are fixed; a sprint
@@ -218,7 +226,7 @@ export default function GanttChart() {
 	// independent of dragState so bars stay memo-stable mid-drag.
 	const labelSpace = useMemo(() => {
 		const rows = new Map<number, { x: number; end: number; id: string }[]>();
-		for (const item of project.workItems) {
+		for (const item of displayProject.workItems) {
 			const rowIndex = getTaskRowIndex(layout, item.id);
 			if (rowIndex === -1) continue;
 			const x = getX(item.startDate);
@@ -236,7 +244,7 @@ export default function GanttChart() {
 			});
 		}
 		return space;
-	}, [project.workItems, layout, getX, getItemWidth, totalWidth]);
+	}, [displayProject.workItems, layout, getX, getItemWidth, totalWidth]);
 
 	// --- Task drag state ---
 	// Dragging is a pure *visual* preview — we never touch project state
@@ -278,6 +286,7 @@ export default function GanttChart() {
 			type: "move" | "resize-start" | "resize-end",
 		) => {
 			e.stopPropagation();
+			if (readOnly) return;
 			const item = project.workItems.find((wi) => wi.id === itemId);
 			if (!item) return;
 			const point = "touches" in e ? e.touches[0] : e;
@@ -295,7 +304,7 @@ export default function GanttChart() {
 				didDrag: false,
 			});
 		},
-		[project.workItems, layout],
+		[project.workItems, layout, readOnly],
 	);
 
 	/** Start dragging a dependency arrow from a task's connector port */
@@ -562,6 +571,7 @@ export default function GanttChart() {
 		(e: React.MouseEvent) => {
 			// Ignore if clicking on a task bar
 			if ((e.target as HTMLElement).closest("[data-workitem]")) return;
+			if (readOnly) return;
 
 			const scrollEl = scrollRef.current;
 			if (!scrollEl) return;
@@ -587,7 +597,7 @@ export default function GanttChart() {
 
 			addWorkItem(wsId, "New Task", clickDate, endDate, undefined, lane);
 		},
-		[layout, getDateAtX, addWorkItem],
+		[layout, getDateAtX, addWorkItem, readOnly],
 	);
 
 	const handleItemClick = useCallback(
@@ -596,16 +606,28 @@ export default function GanttChart() {
 			// during a drag — otherwise every WorkItemBar would re-render
 			// on each drag frame because its onClick prop changed.
 			if (dragStateRef.current?.didDrag) return;
+			if (readOnly) return;
 			setSelectedItemId(itemId === selectedItemId ? null : itemId);
 		},
-		[selectedItemId, setSelectedItemId],
+		[selectedItemId, setSelectedItemId, readOnly],
 	);
 
+	// Double-click drills down: a workstream stretch opens the projects
+	// level, a project bar opens that project's own roadmap, and a real
+	// task opens its editor.
 	const handleItemDoubleClick = useCallback(
 		(itemId: string) => {
-			setModalItemId(itemId);
+			const item = displayProject.workItems.find((wi) => wi.id === itemId);
+			if (!item) return;
+			if (viewLevel === "workstreams") {
+				setViewLevel("projects");
+			} else if (isRollupId(itemId) && item.group) {
+				setFocusGroup(item.group);
+			} else {
+				setModalItemId(itemId);
+			}
 		},
-		[setModalItemId],
+		[displayProject, viewLevel, setViewLevel, setFocusGroup, setModalItemId],
 	);
 
 	// Group columns by month
@@ -792,8 +814,10 @@ export default function GanttChart() {
 						layout={layout}
 						// While a new arrow is being dragged the existing ones
 						// must not intercept the drop — otherwise you can't
-						// land on a task that already has an arrow.
-						interactive={depDrag === null}
+						// land on a task that already has an arrow. Rolled-up
+						// arrows stand for several real ones, so they can't
+						// be clicked away either.
+						interactive={depDrag === null && !readOnly}
 					/>
 
 					{/* Temporary dependency drag line */}
@@ -827,7 +851,7 @@ export default function GanttChart() {
 					)}
 
 					{/* Work item bars */}
-					{project.workItems.map((item) => {
+					{displayProject.workItems.map((item) => {
 						const rowIndex = getTaskRowIndex(layout, item.id);
 						if (rowIndex === -1) return null;
 						let x = getX(item.startDate);
@@ -859,6 +883,7 @@ export default function GanttChart() {
 								height={ROW_HEIGHT - 12}
 								isSelected={selectedItemId === item.id}
 								isDraggingDep={depDrag !== null}
+								readOnly={readOnly}
 								labelSpaceRight={labelSpace.get(item.id) ?? 0}
 								onMouseDown={handleMouseDown}
 								onClick={handleItemClick}
