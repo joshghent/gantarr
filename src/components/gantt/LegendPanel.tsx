@@ -1,11 +1,17 @@
-import { Check, Palette, Plus, Trash2, X } from "lucide-react";
+import { Check, Eye, EyeOff, Palette, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { Input } from "#/components/ui/input";
 import { useGantt } from "#/lib/gantt-context";
+import { showsInWorkstreams } from "#/lib/rollup";
 
 export default function LegendPanel() {
-	const { project, addLegendEntry, updateLegendEntry, deleteLegendEntry } =
-		useGantt();
+	const {
+		project,
+		addLegendEntry,
+		updateLegendEntry,
+		deleteLegendEntry,
+		viewLevel,
+	} = useGantt();
 	const [isAdding, setIsAdding] = useState(false);
 	const [newLabel, setNewLabel] = useState("");
 	const [newColor, setNewColor] = useState("#3b82f6");
@@ -97,6 +103,26 @@ export default function LegendPanel() {
 							</button>
 							<button
 								type="button"
+								onClick={() =>
+									updateLegendEntry(entry.id, {
+										showInWorkstreams: !showsInWorkstreams(entry),
+									})
+								}
+								className="p-0.5 text-muted-foreground hover:text-foreground"
+								title={
+									showsInWorkstreams(entry)
+										? "Shown in the Workstreams view — click to hide"
+										: "Hidden in the Workstreams view — click to show"
+								}
+							>
+								{showsInWorkstreams(entry) ? (
+									<Eye className="h-3 w-3" />
+								) : (
+									<EyeOff className="h-3 w-3" />
+								)}
+							</button>
+							<button
+								type="button"
 								onClick={() => {
 									deleteLegendEntry(entry.id);
 									setEditingId(null);
@@ -112,7 +138,16 @@ export default function LegendPanel() {
 							type="button"
 							data-export-ink="true"
 							onClick={() => startEdit(entry.id, entry.label, entry.color)}
-							className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs text-foreground transition-colors hover:bg-accent"
+							title={
+								viewLevel === "workstreams" && !showsInWorkstreams(entry)
+									? "Not shown in the Workstreams view"
+									: undefined
+							}
+							className={`flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs text-foreground transition-colors hover:bg-accent ${
+								viewLevel === "workstreams" && !showsInWorkstreams(entry)
+									? "opacity-40"
+									: ""
+							}`}
 						>
 							<span
 								className="inline-block h-2.5 w-2.5 rounded-full"

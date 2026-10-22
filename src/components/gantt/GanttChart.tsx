@@ -20,7 +20,12 @@ import { useGantt } from "#/lib/gantt-context";
 import { buildLayout, getTaskRowIndex } from "#/lib/gantt-layout";
 import { updateWorkItem } from "#/lib/gantt-store";
 import { isRollupId } from "#/lib/rollup";
-import { getSprints, resolveSprints, sprintNumber } from "#/lib/sprints";
+import {
+	firstSprintNumber,
+	getSprints,
+	resolveSprints,
+	sprintNumber,
+} from "#/lib/sprints";
 import DependencyArrows from "./DependencyArrows";
 import { HEADER_HEIGHT, ROW_HEIGHT } from "./GanttSidebar";
 import WorkItemBar from "./WorkItemBar";
@@ -109,6 +114,11 @@ export default function GanttChart() {
 			}
 			start = addDays(minDate, -7);
 			end = addDays(maxDate, 30);
+			// A roadmap with a start date set begins there, unless a task
+			// starts earlier — that task still gets its lead-in.
+			const roadmapStart =
+				project.sprints && parseDate(project.sprints.startDate);
+			if (roadmapStart && roadmapStart <= minDate) start = roadmapStart;
 		}
 
 		const colW =
@@ -143,7 +153,14 @@ export default function GanttChart() {
 		// Monday of the first week (getWeeks rounds to Monday); in sprint
 		// view the start of the first sprint; in day view the first day.
 		return { startDate: cols[0] ?? start, columns: cols };
-	}, [project.workItems, viewMode, containerWidth, sprints, daysPerColumn]);
+	}, [
+		project.workItems,
+		project.sprints,
+		viewMode,
+		containerWidth,
+		sprints,
+		daysPerColumn,
+	]);
 
 	const colWidth =
 		viewMode === "days"
@@ -767,7 +784,11 @@ export default function GanttChart() {
 										<span className="font-medium">{col.getDate()}</span>
 									</>
 								) : viewMode === "sprints" ? (
-									<SprintLabel n={sprintNumber(col, sprints)} date={col} />
+									<SprintLabel
+										n={sprintNumber(col, sprints)}
+										first={firstSprintNumber(sprints)}
+										date={col}
+									/>
 								) : (
 									<span>{formatShortDate(col)}</span>
 								)}
@@ -965,11 +986,19 @@ export default function GanttChart() {
 }
 
 /** Sprint column header: "Sprint 14" over the date it starts. */
-function SprintLabel({ n, date }: { n: number; date: Date }) {
+function SprintLabel({
+	n,
+	first,
+	date,
+}: {
+	n: number;
+	first: number;
+	date: Date;
+}) {
 	return (
 		<>
 			<span className="font-display font-semibold">
-				{n > 0 ? `Sprint ${n}` : "Pre-sprint"}
+				{n >= first ? `Sprint ${n}` : "Pre-sprint"}
 			</span>
 			<span>{formatShortDate(date)}</span>
 		</>
