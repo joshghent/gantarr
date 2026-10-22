@@ -30,7 +30,7 @@ const SHORTCUT_GROUPS: {
 			{ keys: ["S"], label: "Sprint view" },
 			{ keys: ["1"], label: "Show every task" },
 			{ keys: ["2"], label: "Show one bar per project" },
-			{ keys: ["3"], label: "Show one bar per workstream stretch" },
+			{ keys: ["3"], label: "Show key work per workstream" },
 		],
 	},
 	{

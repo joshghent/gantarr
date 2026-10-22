@@ -12,6 +12,17 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
 	{
+		version: "2026-10-22-key-work-sprint-numbers",
+		date: "2026-10-22",
+		title: "Sharper Workstreams view, custom sprint numbers",
+		items: [
+			"The Workstreams view (3) now shows just the key work in each workstream — development by default. Tasks left in the workstream's own colour, BAU and the like stay out of it.",
+			"Back-to-back projects keep their own bars there instead of running together; only work that overlaps shares a bar.",
+			"Choose which legend categories show in the Workstreams view with the eye toggle when editing a legend entry.",
+			"Sprint settings now take the date the roadmap starts and the number of its first sprint. The timeline begins on that date.",
+		],
+	},
+	{
 		version: "2026-10-21-levels-sprints-capacity",
 		date: "2026-10-21",
 		title: "Stakeholder views, sprints and team capacity",

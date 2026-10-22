@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { GanttProject, WorkItem } from "../types";
 import { buildLayout } from "./gantt-layout";
-import { buildDisplayProject, isRollupId, listGroups } from "./rollup";
+import {
+	buildDisplayProject,
+	isRollupId,
+	listGroups,
+	showsInWorkstreams,
+} from "./rollup";
 
 function task(
 	id: string,
@@ -139,24 +144,24 @@ describe("projects level", () => {
 describe("workstreams level", () => {
 	const p = project([
 		task("a", "ws1", "2026-11-02", "2026-11-06", { group: "SSO" }),
-		// Starts the Monday after — a weekend apart, so it merges.
-		task("b", "ws1", "2026-11-09", "2026-11-13", { group: "Reliability" }),
-		// A real gap: a new stretch.
-		task("c", "ws1", "2026-12-07", "2026-12-11", { group: "Billing" }),
+		// Overlaps SSO, so it shares its bar.
+		task("b", "ws1", "2026-11-05", "2026-11-13", { group: "Reliability" }),
+		// Starts the day after — back to back, so it keeps its own bar.
+		task("c", "ws1", "2026-11-14", "2026-11-20", { group: "Billing" }),
 		task("d", "ws2", "2026-11-02", "2026-11-03"),
 		task("e", "ws2", "2026-11-03", "2026-11-04", { group: "SSO" }),
 	]);
 	const d = buildDisplayProject(p, "workstreams");
 	const ws1 = d.workItems.filter((i) => i.workstreamId === "ws1");
 
-	it("merges touching work and keeps gaps", () => {
+	it("merges overlapping work and keeps back-to-back work apart", () => {
 		expect(ws1.map((i) => [i.startDate, i.endDate])).toEqual([
 			["2026-11-02", "2026-11-13"],
-			["2026-12-07", "2026-12-11"],
+			["2026-11-14", "2026-11-20"],
 		]);
 	});
 
-	it("labels each stretch with the projects in it", () => {
+	it("labels each bar with the projects in it", () => {
 		expect(ws1.map((i) => i.title)).toEqual(["SSO · Reliability", "Billing"]);
 		const ws2 = d.workItems.filter((i) => i.workstreamId === "ws2");
 		expect(ws2.map((i) => i.title)).toEqual(["d · SSO"]);
@@ -172,6 +177,63 @@ describe("workstreams level", () => {
 		);
 		const [bar] = buildDisplayProject(many, "workstreams").workItems;
 		expect(bar.title).toBe("A · B · C +2");
+	});
+
+	describe("with a legend", () => {
+		const legend = [
+			{ id: "dev", label: "Development", color: "#3b82f6" },
+			{ id: "bau", label: "BAU", color: "#22c55e" },
+		];
+		const withLegend = {
+			...project(
+				[
+					task("pentest", "ws1", "2026-11-30", "2027-01-08", {
+						legendEntryId: "dev",
+					}),
+					task("webinars", "ws1", "2027-01-09", "2027-02-24", {
+						legendEntryId: "dev",
+					}),
+					task("support", "ws1", "2026-11-02", "2027-03-01", {
+						legendEntryId: "bau",
+					}),
+					task("uncoloured", "ws1", "2026-12-01", "2026-12-05"),
+				],
+				[["pentest", "webinars"]],
+			),
+			legend,
+		};
+
+		it("shows only development work by default", () => {
+			const bars = buildDisplayProject(withLegend, "workstreams").workItems;
+			expect(bars.map((b) => b.title)).toEqual(["pentest", "webinars"]);
+		});
+
+		it("keeps the arrow between consecutive bars", () => {
+			const d = buildDisplayProject(withLegend, "workstreams");
+			expect(d.dependencies).toHaveLength(1);
+		});
+
+		it("follows each category's own setting", () => {
+			const custom = {
+				...withLegend,
+				legend: [
+					{ ...legend[0], showInWorkstreams: false },
+					{ ...legend[1], showInWorkstreams: true },
+				],
+			};
+			const bars = buildDisplayProject(custom, "workstreams").workItems;
+			expect(bars.map((b) => b.title)).toEqual(["support"]);
+		});
+	});
+});
+
+describe("showsInWorkstreams", () => {
+	it("defaults to development categories", () => {
+		const entry = (label: string) => ({ id: label, label, color: "#000" });
+		expect(showsInWorkstreams(entry("Development"))).toBe(true);
+		expect(showsInWorkstreams(entry("Dev work"))).toBe(true);
+		expect(showsInWorkstreams(entry("BAU / 20% time"))).toBe(false);
+		expect(showsInWorkstreams(entry("Devops"))).toBe(true);
 	});
 });
 

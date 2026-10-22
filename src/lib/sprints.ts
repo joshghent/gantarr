@@ -43,11 +43,20 @@ export function getSprints(
 	return cols;
 }
 
+/** Number of the roadmap's first sprint. */
+export function firstSprintNumber(sprints: SprintSettings): number {
+	return sprints.firstNumber ?? 1;
+}
+
 /**
- * 1-based sprint number of the sprint starting on (or containing) `date`.
- * Sprints before sprint 1 come out as zero or negative.
+ * Number of the sprint starting on (or containing) `date`, counting up
+ * from the first sprint's number. Sprints before the first one come out
+ * below it.
  */
 export function sprintNumber(date: Date, sprints: SprintSettings): number {
 	const len = sprints.lengthWeeks * 7;
-	return Math.floor(daysBetween(parseDate(sprints.startDate), date) / len) + 1;
+	return (
+		Math.floor(daysBetween(parseDate(sprints.startDate), date) / len) +
+		firstSprintNumber(sprints)
+	);
 }

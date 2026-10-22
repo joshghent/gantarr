@@ -22,7 +22,7 @@ import { overCapacityPeriods } from "#/lib/capacity";
 import { formatShortDate, parseDate } from "#/lib/dates";
 import { downloadJson, exportPdf, exportPng, loadJson } from "#/lib/export";
 import { useGantt } from "#/lib/gantt-context";
-import { resolveSprints } from "#/lib/sprints";
+import { firstSprintNumber, resolveSprints } from "#/lib/sprints";
 
 // Injected at build time by Vite's `define` (see vite.config.ts). Declared
 // here because tsc's include globs don't pick up the ambient in env.d.ts.
@@ -189,7 +189,7 @@ export default function GanttToolbar({
 					{
 						value: "workstreams",
 						label: "Workstreams",
-						title: "One bar per stretch of work in each workstream (3)",
+						title: "Key work in each workstream — development by default (3)",
 					},
 				]}
 			/>
@@ -324,7 +324,10 @@ export function Segmented<T extends string>({
 	);
 }
 
-/** Sprint length and the day sprint 1 starts, saved with the project. */
+/**
+ * Sprint length, the day the roadmap (and its first sprint) starts and
+ * that sprint's number, saved with the project.
+ */
 function SprintSettingsButton() {
 	const { project, setProject } = useGantt();
 	const sprints = resolveSprints(project);
@@ -367,7 +370,7 @@ function SprintSettingsButton() {
 						htmlFor="sprint-start"
 						className="mb-1.5 block text-xs font-medium"
 					>
-						Sprint 1 starts
+						Roadmap starts
 					</label>
 					<Input
 						id="sprint-start"
@@ -375,6 +378,26 @@ function SprintSettingsButton() {
 						value={sprints.startDate}
 						onChange={(e) => {
 							if (e.target.value) update({ startDate: e.target.value });
+						}}
+						className="h-8 text-xs"
+					/>
+				</div>
+				<div>
+					<label
+						htmlFor="sprint-first-number"
+						className="mb-1.5 block text-xs font-medium"
+					>
+						First sprint number
+					</label>
+					<Input
+						id="sprint-first-number"
+						type="number"
+						step={1}
+						value={firstSprintNumber(sprints)}
+						onChange={(e) => {
+							const n = Number(e.target.value);
+							if (e.target.value !== "" && Number.isInteger(n))
+								update({ firstNumber: n });
 						}}
 						className="h-8 text-xs"
 					/>

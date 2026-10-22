@@ -28,6 +28,7 @@ const legendEntrySchema = z.object({
 	id: z.string(),
 	label: z.string(),
 	color: z.string(),
+	showInWorkstreams: z.boolean().optional(),
 });
 
 const workstreamSchema = z.object({
@@ -64,7 +65,11 @@ export const ganttProjectSchema = z.object({
 	dependencies: z.array(dependencySchema),
 	legend: z.array(legendEntrySchema),
 	sprints: z
-		.object({ lengthWeeks: z.number().int().positive(), startDate: isoDate })
+		.object({
+			lengthWeeks: z.number().int().positive(),
+			startDate: isoDate,
+			firstNumber: z.number().int().optional(),
+		})
 		.optional(),
 	teamSize: z.number().int().positive().optional(),
 	createdAt: z.string(),

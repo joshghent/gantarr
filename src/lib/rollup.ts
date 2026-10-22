@@ -1,5 +1,10 @@
-import type { Dependency, GanttProject, ViewLevel, WorkItem } from "../types";
-import { addDays, formatDate, parseDate } from "./dates";
+import type {
+	Dependency,
+	GanttProject,
+	LegendEntry,
+	ViewLevel,
+	WorkItem,
+} from "../types";
 
 /**
  * Roll-up views. The chart can show a project at three levels of detail:
@@ -8,8 +13,11 @@ import { addDays, formatDate, parseDate } from "./dates";
  * - projects:    one bar per headline project (tasks sharing a `group`
  *                within a workstream), spanning its tasks. Tasks with no
  *                group stay as they are.
- * - workstreams: one bar per continuous stretch of work in a workstream,
- *                labelled with the projects in it. Gaps stay visible.
+ * - workstreams: one bar per piece of key work in a workstream — tasks in
+ *                legend categories marked to show there (development, by
+ *                default). Overlapping work merges into one bar labelled
+ *                with the projects in it; back-to-back work stays apart.
+ *                Tasks left in the workstream's own colour don't count.
  *
  * Each level is expressed as an ordinary GanttProject so the existing
  * layout, sidebar and arrow code render it unchanged. Rolled-up bars get
@@ -23,12 +31,6 @@ export function isRollupId(id: string): boolean {
 	return id.startsWith(ROLLUP_PREFIX);
 }
 
-/**
- * Two stretches of work closer than this many calendar days merge into
- * one workstream bar — enough to bridge a weekend, not a real gap.
- */
-const MERGE_GAP_DAYS = 3;
-
 /** Most project names a workstream bar lists before summarising the rest. */
 const MAX_SEGMENT_NAMES = 3;
 
@@ -37,6 +39,29 @@ export function listGroups(project: GanttProject): string[] {
 	const groups = new Set<string>();
 	for (const item of project.workItems) if (item.group) groups.add(item.group);
 	return [...groups].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Whether a legend category's tasks show in the Workstreams view: as set
+ * on the entry, or for development categories when it was never set.
+ */
+export function showsInWorkstreams(entry: LegendEntry): boolean {
+	return entry.showInWorkstreams ?? /\bdev/i.test(entry.label);
+}
+
+/**
+ * The tasks the Workstreams view summarises. When no legend category
+ * qualifies (a chart with no legend, say) every task does, so the view
+ * is never blank for want of setup.
+ */
+function keyWork(project: GanttProject): WorkItem[] {
+	const shown = new Set(
+		project.legend.filter(showsInWorkstreams).map((e) => e.id),
+	);
+	if (shown.size === 0) return project.workItems;
+	return project.workItems.filter(
+		(i) => i.legendEntryId !== null && shown.has(i.legendEntryId),
+	);
 }
 
 /** The legend entry shared by every item, or null when they differ. */
@@ -95,14 +120,17 @@ function rollupDependencies(
 }
 
 /** One bar per project in each workstream; ungrouped tasks pass through. */
-function projectBars(project: GanttProject): {
+function projectBars(
+	project: GanttProject,
+	tasks: WorkItem[] = project.workItems,
+): {
 	items: WorkItem[];
 	barOf: Map<string, string>;
 } {
 	const items: WorkItem[] = [];
 	const barOf = new Map<string, string>();
 	for (const ws of project.workstreams) {
-		const wsItems = project.workItems.filter((i) => i.workstreamId === ws.id);
+		const wsItems = tasks.filter((i) => i.workstreamId === ws.id);
 		const groups = new Map<string, WorkItem[]>();
 		for (const item of wsItems) {
 			if (!item.group) {
@@ -131,12 +159,12 @@ function projectBars(project: GanttProject): {
 	return { items, barOf };
 }
 
-/** Merge each workstream's project bars into continuous stretches. */
+/** Merge each workstream's overlapping key-work bars together. */
 function workstreamBars(project: GanttProject): {
 	items: WorkItem[];
 	barOf: Map<string, string>;
 } {
-	const projects = projectBars(project);
+	const projects = projectBars(project, keyWork(project));
 	const items: WorkItem[] = [];
 	const segmentOf = new Map<string, string>();
 
@@ -166,10 +194,7 @@ function workstreamBars(project: GanttProject): {
 		};
 		let reach = "";
 		for (const bar of bars) {
-			if (current.length > 0) {
-				const bridged = formatDate(addDays(parseDate(reach), MERGE_GAP_DAYS));
-				if (bar.startDate > bridged) flush();
-			}
+			if (current.length > 0 && bar.startDate > reach) flush();
 			if (current.length === 0 || bar.endDate > reach) reach = bar.endDate;
 			current.push(bar);
 		}

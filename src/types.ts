@@ -2,6 +2,12 @@ export interface LegendEntry {
 	id: string;
 	label: string;
 	color: string;
+	/**
+	 * Whether tasks in this category show in the Workstreams view. Unset
+	 * falls back to the label: development categories show, everything
+	 * else doesn't.
+	 */
+	showInWorkstreams?: boolean;
 }
 
 export interface WorkItem {
@@ -44,8 +50,13 @@ export interface Workstream {
 export interface SprintSettings {
 	/** Sprint length in weeks. */
 	lengthWeeks: number;
-	/** First day of sprint 1, YYYY-MM-DD. */
+	/**
+	 * First day of the roadmap and of its first sprint, YYYY-MM-DD. The
+	 * timeline starts here unless a task starts earlier.
+	 */
 	startDate: string;
+	/** Number of the sprint starting on `startDate`. Defaults to 1. */
+	firstNumber?: number;
 }
 
 export interface GanttProject {
@@ -66,6 +77,6 @@ export type ViewMode = "days" | "weeks" | "sprints";
 
 /**
  * How much detail the chart shows: every task, one bar per headline
- * project, or one bar per stretch of work in each workstream.
+ * project, or one bar per stretch of key work in each workstream.
  */
 export type ViewLevel = "detail" | "projects" | "workstreams";

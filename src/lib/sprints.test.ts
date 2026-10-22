@@ -64,3 +64,13 @@ describe("sprintNumber", () => {
 		expect(sprintNumber(parseDate("2026-10-19"), settings)).toBe(0);
 	});
 });
+
+describe("first sprint number", () => {
+	const settings = { lengthWeeks: 2, startDate: "2026-11-02", firstNumber: 7 };
+
+	it("numbers the roadmap's first sprint from the chosen value", () => {
+		expect(sprintNumber(parseDate("2026-11-02"), settings)).toBe(7);
+		expect(sprintNumber(parseDate("2026-11-16"), settings)).toBe(8);
+		expect(sprintNumber(parseDate("2026-10-19"), settings)).toBe(6);
+	});
+});

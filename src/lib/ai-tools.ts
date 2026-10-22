@@ -97,9 +97,11 @@ A GanttProject is the wire format the app stores:
   (\`startDate\`/\`endDate\` are YYYY-MM-DD; \`legendEntryId\` is null or a legend id;
   \`group\` is the task's headline project; \`people\` the engineers it needs)
 - \`dependencies[]\`: \`{ id, fromItemId, toItemId }\`
-- \`legend[]\`: \`{ id, label, color }\`
+- \`legend[]\`: \`{ id, label, color, showInWorkstreams? }\` (the categories the
+  Workstreams view summarises; unset means development ones)
 - optional \`teamSize\` (engineers available) and \`sprints\`:
-  \`{ lengthWeeks, startDate }\` (sprint 1's first day)
+  \`{ lengthWeeks, startDate, firstNumber? }\` (the roadmap's and first
+  sprint's first day, and that sprint's number, default 1)
 
 Prefer the friendly chart input + \`create_gantt_chart\`; it fills in ids,
 ordering, colors, and legend resolution for you.
